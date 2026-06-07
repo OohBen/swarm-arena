@@ -11,28 +11,28 @@ const OWNER_LABEL: Record<string, string> = { blue: 'BLUE', red: 'RED', neutral:
 const ORDER_GUIDE: Record<string, { title: string; instant: string; queued: string }> = {
   assault: {
     title: 'Assault',
-    instant: '+18 pressure, trims enemy pressure and fortification',
-    queued: 'queues a high-priority worker assault',
+    instant: '+18 pressure; trims enemy pressure and fortification',
+    queued: 'queues a priority Field assault; on-time result adds capture or HQ damage',
   },
   reinforce: {
     title: 'Reinforce',
-    instant: 'cuts enemy pressure and adds fortification',
-    queued: 'queues a worker hold on your own node',
+    instant: '-20 enemy pressure; adds +8 fortification',
+    queued: 'queues a Field hold; good Engineers make this stick',
   },
   defend: {
     title: 'Hold',
-    instant: 'slows enemy capture pressure on the node',
-    queued: 'queues a worker defensive task',
+    instant: '-20 enemy pressure; buys time on hostile ground',
+    queued: 'queues a Field defense so your side can stabilize the lane',
   },
   sabotage: {
     title: 'Sabotage',
-    instant: 'cuts fortification and adds light pressure',
-    queued: 'queues a worker sabotage task',
+    instant: '-14 fortification; adds light pressure',
+    queued: 'queues a Field sabotage; opens fortified posts for assault',
   },
   scout: {
     title: 'Scout',
-    instant: 'marks the node with a small pressure nudge',
-    queued: 'queues a lead recon task',
+    instant: '+6 pressure and marks the node contested',
+    queued: 'queues a Command recon task; Scouts and Surveyors shine here',
   },
 };
 
@@ -74,16 +74,22 @@ function clamp(n: number, min = 0, max = 100) { return Math.max(min, Math.min(ma
 function splitAdj(s: string) { return (s || '').split(',').map((x) => x.trim()).filter(Boolean); }
 function captureLimit(n: any) { return n?.owner === 'neutral' ? 160 : 220 + Math.floor((n?.fortification ?? 0) / 2); }
 function pressureGap(n: any) { return num(n?.bluePressure) - num(n?.redPressure); }
+function pressureGapFor(n: any, team = 'blue') {
+  return team === 'red' ? num(n?.redPressure) - num(n?.bluePressure) : pressureGap(n);
+}
 function supplyLeft(teamState: any, fallbackBudget: number) {
   if (!teamState) return fallbackBudget;
   return num(teamState.supplyMicros);
 }
-function nodeCall(n: any) {
+function nodeCall(n: any, team = 'blue') {
   if (!n) return 'Select a front-line node';
-  if (n.kind === 'hq') return n.owner === 'red' ? 'Crack Red HQ' : 'Protect Blue HQ';
-  if (n.owner === 'blue') return num(n.redPressure) > 0 ? `Hold ${n.name}` : `Fortify ${n.name}`;
-  if (pressureGap(n) >= 40) return `Finish ${n.name}`;
-  if (pressureGap(n) < -20) return `Stop Red at ${n.name}`;
+  const enemy = team === 'red' ? 'blue' : 'red';
+  const ownPressure = team === 'red' ? num(n.redPressure) : num(n.bluePressure);
+  const enemyPressure = team === 'red' ? num(n.bluePressure) : num(n.redPressure);
+  if (n.kind === 'hq') return n.owner === enemy ? `Crack ${OWNER_LABEL[enemy]} HQ` : `Protect ${OWNER_LABEL[team]} HQ`;
+  if (n.owner === team) return enemyPressure > 0 ? `Hold ${n.name}` : `Fortify ${n.name}`;
+  if (ownPressure - enemyPressure >= 40) return `Finish ${n.name}`;
+  if (ownPressure - enemyPressure < -20) return `Stop ${OWNER_LABEL[enemy]} at ${n.name}`;
   return `Contest ${n.name}`;
 }
 
@@ -153,12 +159,14 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
   const complete = goal?.status === 'complete';
   const stopped = goal?.status === 'stopped';
   const winner = teamStates.find((s: any) => s.status === 'winner') ?? null;
+  const viewTeam = myTeam === 'red' ? 'red' : 'blue';
+  const enemyPressureKey = viewTeam === 'red' ? 'bluePressure' : 'redPressure';
   const bestPush = [...battleNodes]
-    .filter((n: any) => n.owner !== 'blue' && n.kind !== 'hq')
-    .sort((a: any, b: any) => pressureGap(b) - pressureGap(a))[0] ?? null;
+    .filter((n: any) => n.owner !== viewTeam && n.kind !== 'hq')
+    .sort((a: any, b: any) => pressureGapFor(b, viewTeam) - pressureGapFor(a, viewTeam))[0] ?? null;
   const mustHold = [...battleNodes]
-    .filter((n: any) => n.owner === 'blue' && n.kind !== 'hq' && num(n.redPressure) > 0)
-    .sort((a: any, b: any) => num(b.redPressure) - num(a.redPressure))[0] ?? null;
+    .filter((n: any) => n.owner === viewTeam && n.kind !== 'hq' && num(n[enemyPressureKey]) > 0)
+    .sort((a: any, b: any) => num(b[enemyPressureKey]) - num(a[enemyPressureKey]))[0] ?? null;
 
   useEffect(() => {
     if (!hasBattle || battleNodes.length === 0) return;
@@ -213,8 +221,8 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
       {hasBattle && (
         <div className="wb-situation">
           <span className="wb-sit-chip">WIN · HQ, territory, or supply</span>
-          <span className="wb-sit-chip">NOW · {winner ? `${String(winner.team).toUpperCase()} victory` : nodeCall(mustHold ?? bestPush ?? selNode)}</span>
-          <span className="wb-sit-chip">ORDER · {selNode ? nodeCall(selNode) : 'Central Relay'}</span>
+          <span className="wb-sit-chip">NOW · {winner ? `${String(winner.team).toUpperCase()} victory` : nodeCall(mustHold ?? bestPush ?? selNode, viewTeam)}</span>
+          <span className="wb-sit-chip">ORDER · {selNode ? nodeCall(selNode, viewTeam) : 'Central Relay'}</span>
         </div>
       )}
 
@@ -455,6 +463,14 @@ function BattleOrders({ node, team, teamStates, battleOrders, tasks, agents, roo
   const canOrder = Boolean(team) && tokens > 0;
   const holdType = node.owner === team ? 'reinforce' : 'defend';
   const guides = ['assault', holdType, 'sabotage', 'scout'].map((k) => ORDER_GUIDE[k]);
+  const readTeam = team === 'red' ? 'red' : 'blue';
+  const teamLabel = OWNER_LABEL[readTeam];
+  const enemy = readTeam === 'red' ? 'blue' : 'red';
+  const ownPressure = readTeam === 'red' ? num(node.redPressure) : num(node.bluePressure);
+  const enemyPressure = readTeam === 'red' ? num(node.bluePressure) : num(node.redPressure);
+  const fightRead = node.kind === 'hq'
+    ? `Damage ${OWNER_LABEL[node.owner] ?? node.owner} HQ to 0 integrity. Assaults hit harder after adjacent posts are held.`
+    : `${teamLabel} needs ${Math.max(0, limit - ownPressure)} more pressure; ${OWNER_LABEL[enemy]} pressure (${enemyPressure}) slows the lane.`;
   const issue = (orderType: string) => {
     if (!team) return;
     conn?.reducers.issueOrder({ roomId, targetNodeId: node.id, orderType, team });
@@ -466,6 +482,11 @@ function BattleOrders({ node, team, teamStates, battleOrders, tasks, agents, roo
         <div className="wb-nodecard-k">{node.lane.toUpperCase()} · {node.kind.toUpperCase()}</div>
         <div className="wb-nodecard-name">{node.name}</div>
         <div className="wb-nodecard-owner">{OWNER_LABEL[node.owner] ?? node.owner} · {node.status}</div>
+      </div>
+      <div className="wb-doctrine">
+        <div><b>Intent</b><span>{nodeCall(node, readTeam)}</span></div>
+        <div><b>Fight</b><span>{fightRead}</span></div>
+        <div><b>Agents</b><span>Orders create priority tasks; one agent claims each task atomically; only on-time structured results change this node.</span></div>
       </div>
       <div className="wb-kv"><span>Blue pressure</span><b>{node.bluePressure}</b></div>
       <div className="wb-kv"><span>Red pressure</span><b>{node.redPressure}</b></div>

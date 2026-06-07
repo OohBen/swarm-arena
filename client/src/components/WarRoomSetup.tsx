@@ -57,7 +57,6 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
   const [name, setName] = useState(localStorage.getItem('swarm_op_name') || 'CMDR');
   const [missionId, setMissionId] = useState(MISSIONS[0].id);
   const [units, setUnits] = useState<Unit[]>(starterUnits);
-  const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<'idle' | 'creating'>('idle');
   const [copied, setCopied] = useState(false);
   const [draggingUnit, setDraggingUnit] = useState<string | null>(null);
@@ -406,9 +405,8 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
               <div className="wr-market-list">
                 {MODELS.map((m) => <MarketCard key={m.id} m={m} disabled={!canEdit} onAdd={() => addUnit(m.id, 'field')} />)}
               </div>
-              <div className="wr-custom">
-                <input className="wr-input" disabled={!canEdit} placeholder="custom openrouter id..." value={custom} onChange={(e) => setCustom(e.target.value)} />
-                <button className="wr-btn-sm" disabled={!canEdit || !custom.trim()} onClick={() => { addUnit(custom.trim(), 'field'); setCustom(''); }}>+ field</button>
+              <div className="wr-market-note">
+                RISK means the measured p50 is near or over the 3.0s combat window. Late answers retry and do not move the map.
               </div>
             </div>
 
@@ -534,7 +532,7 @@ function MarketCard({ m, disabled, onAdd }: { m: ModelCard; disabled: boolean; o
       <div className="wr-uc-lat">strict JSON p50 ~{m.p50.toLocaleString()}ms</div>
       <div className="wr-uc-bars">
         <Bar label="SPD" v={m.speed} /><Bar label="QAL" v={m.quality} />
-        {!m.beatsDeadline && <span className="wr-uc-late">LATE</span>}
+        {!m.beatsDeadline && <span className="wr-uc-late" title="May miss the 3.0s combat window; late answers retry without map effect.">RISK</span>}
       </div>
       <button className="wr-uc-add" disabled={disabled} onClick={onAdd}>+ deploy</button>
     </div>

@@ -574,10 +574,10 @@ body {
 
 .wr-grid { display: grid; grid-template-columns: 1fr; gap: 22px; }
 
-/* roster / market — compact 4x2 market so the full choice set stays visible */
+/* roster / market — six curated model classes, sized for readable comparison */
 .wr-market { min-width: 0; }
 .wr-market-list {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px; overflow: visible; padding: 0;
 }
 .wr-table { min-height: 0; }
@@ -610,7 +610,10 @@ body {
 .wr-uc-add:hover { background: #1f1b14; color: #f4efe0; }
 .wr-uc-add:disabled { opacity: 0.35; cursor: not-allowed; }
 .wr-uc-add:disabled:hover { background: transparent; color: #1f1b14; }
-.wr-custom { display: flex; gap: 6px; margin-top: 10px; }
+.wr-market-note {
+  margin-top: 9px; font-family: 'IBM Plex Mono'; font-size: 9.5px; line-height: 1.4;
+  color: #6b6553; border: 1.5px solid rgba(31,27,20,0.28); background: rgba(244,239,224,0.64); padding: 7px 9px;
+}
 .wr-input { flex: 1; background: #f4efe0; border: 1.5px solid #1f1b14; padding: 7px 9px; font-family: 'IBM Plex Mono'; font-size: 11px; color: #1f1b14; }
 .wr-input:focus { outline: none; border-color: #2e5a8c; }
 .wr-btn-sm { cursor: pointer; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 0 10px; background: transparent; border: 1.5px solid #1f1b14; color: #1f1b14; }
@@ -854,6 +857,15 @@ body {
 .wb-nodecard-k { font-family: 'IBM Plex Mono'; font-size: 8.5px; color: #6b6553; letter-spacing: 0.1em; }
 .wb-nodecard-name { font-family: 'Saira Condensed'; font-weight: 800; font-size: 22px; line-height: 1; margin: 5px 0; }
 .wb-nodecard-owner { font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.14em; color: #1f1b14; }
+.wb-doctrine {
+  display: grid; gap: 5px; margin: 0 0 10px;
+}
+.wb-doctrine div {
+  display: grid; grid-template-columns: 54px 1fr; gap: 7px;
+  padding: 6px 7px; background: rgba(244,239,224,0.72); border: 1px solid rgba(31,27,20,0.22);
+}
+.wb-doctrine b { font-family: 'Oswald'; font-size: 9.5px; letter-spacing: 0.1em; color: #1f1b14; text-transform: uppercase; }
+.wb-doctrine span { min-width: 0; font-family: 'IBM Plex Mono'; font-size: 8.4px; color: #4a4536; line-height: 1.35; }
 .wb-pressure-card { margin: 9px 0 10px; }
 .wb-pressure-track {
   height: 16px; border: 1.5px solid rgba(31,27,20,0.45); background: #ded7c2;

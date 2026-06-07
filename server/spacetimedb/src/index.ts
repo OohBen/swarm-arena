@@ -20,7 +20,7 @@ const CRISIS_DEADLINE_MICROS = 16_000_000n; // window to respond before it bites
 const CRISIS_COOLDOWN_MICROS = 28_000_000n; // avoid crisis spam
 const BATTLE_INTERVAL_MICROS = 4_000_000n; // battle director cadence
 const MAX_COMMAND_TOKENS = 4;
-const MAX_ACTIVE_BATTLE_TASKS = 2;
+const MAX_ACTIVE_BATTLE_TASKS = 3;
 const DRAFT_POINTS_CAP = 14;
 const MAX_DRAFT_UNITS = 12;
 const NEUTRAL_CAPTURE_THRESHOLD = 160;
@@ -37,7 +37,7 @@ const CRISIS_MSG: Record<string, string> = {
 
 const MODEL_POINTS: Record<string, number> = {
   'openai/gpt-oss-120b:nitro': 3,
-  'z-ai/glm-4.7:nitro': 4,
+  'z-ai/glm-4.7:nitro': 5,
   'inception/mercury-2:nitro': 3,
   'google/gemini-3.1-flash-lite:nitro': 3,
   'z-ai/glm-4.7-flash:nitro': 1,
@@ -872,10 +872,11 @@ function modelBonus(model: string | undefined, action: string, required_role: st
   if (!model) return 0;
   const lead = required_role === 'lead';
   if (/gpt-oss/i.test(model)) {
-    if (action === 'scout') return lead ? 7 : 4;
-    if (action === 'defend' || action === 'reinforce') return 1;
-    if (action === 'sabotage') return -2;
-    return 0;
+    if (action === 'scout') return lead ? 10 : 5;
+    if (action === 'defend' || action === 'reinforce') return 0;
+    if (action === 'sabotage') return -5;
+    if (action === 'assault') return -3;
+    return -2;
   }
   if (/glm-4\.7:nitro/i.test(model)) {
     if (action === 'defend' || action === 'reinforce' || action === 'sabotage') return 9;
