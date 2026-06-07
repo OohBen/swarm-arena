@@ -1172,7 +1172,7 @@ export const joinRoom = spacetimedb.reducer(
     const r = ctx.db.room.id.find(room_id);
     if (!r) throw new SenderError('room not found');
     const claimedTeam = isPlayableTeam(team) ? team : 'spectator';
-    if (r.status === 'setup') assertTeamAvailable(ctx, room_id, claimedTeam);
+    assertTeamAvailable(ctx, room_id, claimedTeam);
     upsertOperator(ctx, room_id, display_name, claimedTeam, false);
     emit(ctx, room_id, 'operator_joined', `${display_name} joined as ${claimedTeam.toUpperCase()}`, { operator_id: ctx.sender });
   }

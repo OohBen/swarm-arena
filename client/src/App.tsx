@@ -43,13 +43,13 @@ export default function App() {
 
   // Operator presence heartbeat while in a room.
   useEffect(() => {
-    if (!conn || roomId == null) return;
+    if (!conn || roomId == null || !myOp) return;
     const beat = () =>
       conn.reducers.heartbeatOperator({ roomId, selectedTaskId: selectedId ?? undefined });
     beat();
     const h = setInterval(beat, 3000);
     return () => clearInterval(h);
-  }, [conn, roomId, selectedId]);
+  }, [conn, roomId, selectedId, myOp]);
 
   if (!isActive || !subscribed) {
     return (
