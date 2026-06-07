@@ -1,181 +1,357 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import { MISSIONS, MODELS, CREW_POINTS_CAP, modelById, ModelCard } from '../lib/missions';
 
+type Team = 'blue' | 'red';
 type Unit = { uid: string; model: string; tier: 'command' | 'field' };
 
 function uid() {
   return Math.random().toString(36).slice(2, 9);
 }
 
-export function WarRoomSetup({ conn, identity, isActive, rooms, goals, preRoomId, onEnter }: any) {
-  const [name, setName] = useState(localStorage.getItem('swarm_op_name') || 'CMDR');
-  const [missionId, setMissionId] = useState(MISSIONS[0].id);
-  const [units, setUnits] = useState<Unit[]>([
+function starterUnits(): Unit[] {
+  return [
     { uid: uid(), model: 'z-ai/glm-4.7:nitro', tier: 'command' },
     { uid: uid(), model: 'openai/gpt-oss-120b:nitro', tier: 'field' },
     { uid: uid(), model: 'openai/gpt-oss-120b:nitro', tier: 'field' },
-  ]);
+  ];
+}
+
+function crewFromUnits(units: Unit[]) {
+  const map: Record<string, number> = {};
+  for (const u of units) {
+    const role = u.tier === 'command' ? 'lead' : 'worker';
+    const k = `${u.model}|${role}`;
+    map[k] = (map[k] ?? 0) + 1;
+  }
+  return Object.entries(map).map(([k, count]) => {
+    const [model, role] = k.split('|');
+    return { model, role, count };
+  });
+}
+
+function unitsFromDraft(rows: any[]): Unit[] {
+  const out: Unit[] = [];
+  for (const row of rows) {
+    for (let i = 0; i < row.count; i += 1) {
+      out.push({ uid: uid(), model: row.model, tier: row.role === 'lead' ? 'command' : 'field' });
+    }
+  }
+  return out.length ? out : starterUnits();
+}
+
+function pointsForRows(rows: any[]) {
+  return rows.reduce((sum, row) => sum + (modelById(row.model)?.pts ?? 3) * row.count, 0);
+}
+
+function countRows(rows: any[]) {
+  return rows.reduce((sum, row) => sum + row.count, 0);
+}
+
+function sameIdentity(a: any, b: any) {
+  return a?.toHexString?.() === b?.toHexString?.();
+}
+
+export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators, draftSlots, preRoomId, currentRoom, onEnter, onExit }: any) {
+  const [name, setName] = useState(localStorage.getItem('swarm_op_name') || 'CMDR');
+  const [missionId, setMissionId] = useState(MISSIONS[0].id);
+  const [units, setUnits] = useState<Unit[]>(starterUnits);
   const [custom, setCustom] = useState('');
-  const [phase, setPhase] = useState<'idle' | 'creating' | 'submitting'>('idle');
+  const [phase, setPhase] = useState<'idle' | 'creating'>('idle');
+  const [copied, setCopied] = useState(false);
   const snapshot = useRef<Set<string>>(new Set());
-  const mission = MISSIONS.find((m) => m.id === missionId)!;
+  const hydrated = useRef<string>('');
   const me = identity?.toHexString();
+
+  const room = currentRoom ?? (preRoomId != null ? rooms.find((r: any) => r.id === preRoomId) ?? null : null);
+  const mission = MISSIONS.find((m) => m.id === (room?.name ?? missionId)) ?? MISSIONS[0];
+  const roomId = room?.id ?? null;
+  const roomOps = roomId != null ? operators.filter((o: any) => o.roomId === roomId) : [];
+  const blueOp = roomOps.find((o: any) => o.team === 'blue') ?? null;
+  const redOp = roomOps.find((o: any) => o.team === 'red') ?? null;
+  const meOp = me ? roomOps.find((o: any) => o.identity?.toHexString() === me) ?? null : null;
+  const myTeam: Team | null = meOp?.team === 'blue' || meOp?.team === 'red' ? meOp.team : null;
+  const locked = Boolean(meOp?.ready);
+  const canEdit = Boolean(room && room.status === 'setup' && myTeam && !locked);
+  const shareUrl = room ? `${window.location.origin}${window.location.pathname}?room=${String(room.id)}` : '';
+
+  const teamRows = (team: Team) =>
+    draftSlots.filter((s: any) => roomId != null && s.roomId === roomId && s.team === team);
+  const blueDraft = teamRows('blue');
+  const redDraft = teamRows('red');
 
   const ptsOf = (id: string) => modelById(id)?.pts ?? 3;
   const pointsUsed = units.reduce((s, u) => s + ptsOf(u.model), 0);
   const overCap = pointsUsed > CREW_POINTS_CAP;
   const command = units.filter((u) => u.tier === 'command');
   const field = units.filter((u) => u.tier === 'field');
+  const crewSpec = useMemo(() => crewFromUnits(units), [units]);
+  const crewSig = JSON.stringify(crewSpec);
 
-  // estimated fleet burn for one roughly 1k-token objective call per unit.
   const estBurn = units.reduce((s, u) => {
     const m = modelById(u.model);
     return s + (m ? (m.priceIn * 500 + m.priceOut * 500) / 1_000_000 : 0.0015);
   }, 0);
 
-  const crewSpec = (() => {
-    const map: Record<string, number> = {};
-    for (const u of units) {
-      const role = u.tier === 'command' ? 'lead' : 'worker';
-      const k = `${u.model}|${role}`;
-      map[k] = (map[k] ?? 0) + 1;
-    }
-    return Object.entries(map).map(([k, count]) => {
-      const [model, role] = k.split('|');
-      return { model, role, count };
-    });
-  })();
-
   useEffect(() => { localStorage.setItem('swarm_op_name', name); }, [name]);
 
   useEffect(() => {
     if (phase !== 'creating' || !conn) return;
-    const mine = rooms.filter((r: any) => me && r.createdBy?.toHexString() === me);
+    const mine = rooms.filter((r: any) => me && r.createdBy?.toHexString() === me && r.status === 'setup');
     const fresh = mine.find((r: any) => !snapshot.current.has(String(r.id)));
-    if (fresh) { submit(fresh.id); onEnter(fresh.id, units.map((u) => u.model)); setPhase('submitting'); }
-  }, [rooms, phase]);
+    if (fresh) {
+      onEnter(fresh.id);
+      setPhase('idle');
+    }
+  }, [rooms, phase, conn, me, onEnter]);
 
-  const submit = (roomId: bigint) => {
-    conn.reducers.submitGoal({
-      roomId, title: mission.brief,
-      maxDepth: mission.maxDepth, maxTasks: mission.maxTasks,
-      deadlineMs: BigInt(mission.deadlineMs), runBudgetMicros: BigInt(mission.supplyMicros),
+  useEffect(() => {
+    if (!room || !myTeam) return;
+    const key = `${String(room.id)}:${myTeam}`;
+    if (hydrated.current === key) return;
+    const rows = teamRows(myTeam);
+    if (rows.length > 0) setUnits(unitsFromDraft(rows));
+    else setUnits(starterUnits());
+    hydrated.current = key;
+  }, [room?.id, myTeam, draftSlots.length]);
+
+  useEffect(() => {
+    if (!conn || !room || room.status !== 'setup' || !myTeam || locked || overCap || units.length === 0) return;
+    const h = window.setTimeout(() => {
+      conn.reducers.submitDraft({
+        roomId: room.id,
+        team: myTeam,
+        ready: false,
+        title: mission.brief,
+        maxDepth: mission.maxDepth,
+        maxTasks: mission.maxTasks,
+        deadlineMs: BigInt(mission.deadlineMs),
+        runBudgetMicros: BigInt(mission.supplyMicros),
+        crew: crewSpec,
+      });
+    }, 350);
+    return () => window.clearTimeout(h);
+  }, [conn, room?.id, room?.status, myTeam, locked, overCap, units.length, mission.id, crewSig]);
+
+  const host = () => {
+    if (!conn || !identity || phase !== 'idle') return;
+    snapshot.current = new Set(
+      rooms.filter((r: any) => me && r.createdBy?.toHexString() === me).map((r: any) => String(r.id))
+    );
+    conn.reducers.createRoom({ name: missionId, displayName: name });
+    setPhase('creating');
+  };
+
+  const joinSide = (id: bigint, team: Team | 'spectator') => {
+    conn?.reducers.joinRoom({ roomId: id, displayName: name, team });
+    onEnter(id);
+  };
+
+  const lockDraft = () => {
+    if (!conn || !room || !myTeam || overCap || units.length === 0) return;
+    conn.reducers.submitDraft({
+      roomId: room.id,
+      team: myTeam,
+      ready: true,
+      title: mission.brief,
+      maxDepth: mission.maxDepth,
+      maxTasks: mission.maxTasks,
+      deadlineMs: BigInt(mission.deadlineMs),
+      runBudgetMicros: BigInt(mission.supplyMicros),
       crew: crewSpec,
     });
   };
 
-  const launch = () => {
-    if (!conn || !identity || units.length === 0 || overCap) return;
-    if (preRoomId != null) { submit(preRoomId); onEnter(preRoomId, units.map((u) => u.model)); setPhase('submitting'); return; }
-    snapshot.current = new Set(rooms.filter((r: any) => me && r.createdBy?.toHexString() === me).map((r: any) => String(r.id)));
-    conn.reducers.createRoom({ name: mission.id, displayName: name });
-    setPhase('creating');
+  const copyShare = async () => {
+    if (!shareUrl) return;
+    await navigator.clipboard?.writeText(shareUrl);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
   };
 
-  const addUnit = (model: string, tier: 'command' | 'field') =>
+  const addUnit = (model: string, tier: 'command' | 'field') => {
+    if (!canEdit) return;
     setUnits((u) => [...u, { uid: uid(), model, tier }]);
-  const removeUnit = (id: string) => setUnits((u) => u.filter((x) => x.uid !== id));
+  };
+  const removeUnit = (id: string) => {
+    if (!canEdit) return;
+    setUnits((u) => u.filter((x) => x.uid !== id));
+  };
 
-  const onDrop = (tier: 'command' | 'field') => (e: React.DragEvent) => {
+  const onDrop = (tier: 'command' | 'field') => (e: DragEvent) => {
     e.preventDefault();
     const model = e.dataTransfer.getData('model');
     if (model) addUnit(model, tier);
   };
-  const allow = (e: React.DragEvent) => e.preventDefault();
+  const allow = (e: DragEvent) => e.preventDefault();
 
-  const joinable = rooms.filter((r: any) => goals.some((g: any) => g.roomId === r.id && g.status === 'active'));
+  const setupRooms = rooms.filter((r: any) => r.status === 'setup');
+  const runningRooms = rooms.filter((r: any) => goals.some((g: any) => g.roomId === r.id && g.status === 'active'));
+  const waitingOn = !room
+    ? 'Host a room, then send the room link to the second commander.'
+    : !blueOp
+      ? 'Waiting for Blue commander.'
+      : !redOp
+        ? 'Waiting for Red commander.'
+        : !blueOp.ready || !redOp.ready
+          ? 'Both commanders draft independently, then lock. Battle starts automatically.'
+          : 'Both sides locked. Starting battle...';
 
   return (
     <div className="wr">
       <div className="wr-sheet">
-        {/* title block */}
         <div className="wr-titleblock">
           <div className="wr-tb-left">
-            <div className="wr-stamp">OPERATIONS</div>
+            <div className="wr-stamp">MULTIPLAYER</div>
             <h1 className="wr-h1">SWARM ARENA</h1>
-            <div className="wr-sub">Human-commanded AI war · Blue drafts a fleet, Red mirrors it, agents fight live</div>
+            <div className="wr-sub">Two human commanders draft AI fleets; SpacetimeDB runs the shared battle state live</div>
           </div>
           <div className="wr-tb-right">
-            <div className="wr-reg">REV 2 · SECTOR M-04</div>
-            <div className={`wr-link ${isActive ? 'on' : ''}`}>{isActive ? '● UPLINK LIVE' : '○ LINKING…'}</div>
+            <div className="wr-reg">{room ? `ROOM ${String(room.id)} · ${room.status.toUpperCase()}` : 'NO ROOM'}</div>
+            <div className={`wr-link ${isActive ? 'on' : ''}`}>{isActive ? '● UPLINK LIVE' : '○ LINKING'}</div>
           </div>
         </div>
 
-        {/* mission tabs */}
-        <div className="wr-label">01 · Operation</div>
+        <div className="wr-lobbybar">
+          <div>
+            <div className="wr-label">01 · Multiplayer lobby</div>
+            <div className="wr-lobbyline">{waitingOn}</div>
+          </div>
+          {room && (
+            <div className="wr-share">
+              <input className="wr-input" value={shareUrl} readOnly />
+              <button className="wr-btn-sm" onClick={copyShare}>{copied ? 'copied' : 'copy link'}</button>
+              <button className="wr-btn-sm" onClick={onExit}>leave</button>
+            </div>
+          )}
+        </div>
+
+        <div className="wr-commanders">
+          <TeamPanel
+            team="blue"
+            op={blueOp}
+            draft={blueDraft}
+            isMe={sameIdentity(blueOp?.identity, identity)}
+            canJoin={Boolean(room && room.status === 'setup' && (!blueOp || sameIdentity(blueOp.identity, identity)))}
+            onJoin={() => room && joinSide(room.id, 'blue')}
+          />
+          <TeamPanel
+            team="red"
+            op={redOp}
+            draft={redDraft}
+            isMe={sameIdentity(redOp?.identity, identity)}
+            canJoin={Boolean(room && room.status === 'setup' && (!redOp || sameIdentity(redOp.identity, identity)))}
+            onJoin={() => room && joinSide(room.id, 'red')}
+          />
+        </div>
+
+        <div className="wr-label">02 · Operation</div>
         <div className="wr-missions">
           {MISSIONS.map((m) => (
-            <button key={m.id} className={`wr-mtab ${m.id === missionId ? 'sel' : ''}`} onClick={() => setMissionId(m.id)}>
+            <button
+              key={m.id}
+              className={`wr-mtab ${m.id === mission.id ? 'sel' : ''}`}
+              disabled={Boolean(room)}
+              onClick={() => setMissionId(m.id)}
+            >
               <span className="wr-mtab-name">{m.name}</span>
               <span className="wr-mtab-meta">{m.maxTasks} actions · {(m.deadlineMs / 1000).toFixed(1)}s · ${(m.supplyMicros / 1_000_000).toFixed(3)} supply</span>
             </button>
           ))}
         </div>
         <div className="wr-brief">
-          <span><b>Win</b> crack Red HQ or hold more territory</span>
-          <span><b>Draft</b> Blue fleet; Red mirrors it</span>
-          <span><b>Command</b> spend tokens to swing a node</span>
+          <span><b>Blue</b> human commander drafts Blue fleet</span>
+          <span><b>Red</b> second human drafts Red fleet</span>
+          <span><b>Fight</b> AI agents claim combat tasks live</span>
         </div>
 
-        <div className="wr-grid">
-          {/* model market */}
-          <div className="wr-market">
-            <div className="wr-label">02 · Roster — drag units onto the table</div>
-            <div className="wr-market-list">
-              {MODELS.map((m) => <MarketCard key={m.id} m={m} onAdd={() => addUnit(m.id, 'field')} />)}
+        {!room && (
+          <div className="wr-dispatch compact">
+            <div className="wr-callsign">
+              <span className="wr-label">Callsign</span>
+              <input className="wr-input cs" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
-            <div className="wr-custom">
-              <input className="wr-input" placeholder="custom openrouter id…" value={custom} onChange={(e) => setCustom(e.target.value)} />
-              <button className="wr-btn-sm" disabled={!custom.trim()} onClick={() => { addUnit(custom.trim(), 'field'); setCustom(''); }}>+ field</button>
-            </div>
+            <button className="wr-launch" disabled={!isActive || phase !== 'idle'} onClick={host}>
+              {phase === 'creating' ? 'CREATING ROOM...' : 'HOST BLUE LOBBY'}
+            </button>
           </div>
+        )}
 
-          {/* command table */}
-          <div className="wr-table" onDragOver={allow}>
-            <div className="wr-label-row">
-              <span className="wr-label">03 · Command structure</span>
-              <span className={`wr-points ${overCap ? 'over' : ''}`}>
-                CREW {pointsUsed}/{CREW_POINTS_CAP} <span className="wr-burn">· est. burn ${estBurn.toFixed(4)}/round</span>
-              </span>
-            </div>
-
-            <div className={`wr-tier command ${command.length === 0 ? 'empty' : ''}`} onDrop={onDrop('command')} onDragOver={allow}>
-              <div className="wr-tier-tag">◆ COMMAND</div>
-              <div className="wr-counters">
-                {command.length === 0 && <div className="wr-drop">drop a Lead here</div>}
-                {command.map((u) => <Counter key={u.uid} u={u} onRemove={() => removeUnit(u.uid)} />)}
+        {room && (
+          <div className="wr-grid">
+            <div className="wr-market">
+              <div className="wr-label">03 · Model market</div>
+              <div className="wr-market-list">
+                {MODELS.map((m) => <MarketCard key={m.id} m={m} disabled={!canEdit} onAdd={() => addUnit(m.id, 'field')} />)}
+              </div>
+              <div className="wr-custom">
+                <input className="wr-input" disabled={!canEdit} placeholder="custom openrouter id..." value={custom} onChange={(e) => setCustom(e.target.value)} />
+                <button className="wr-btn-sm" disabled={!canEdit || !custom.trim()} onClick={() => { addUnit(custom.trim(), 'field'); setCustom(''); }}>+ field</button>
               </div>
             </div>
 
-            <div className="wr-spine"><span>chain of command</span></div>
+            <div className={`wr-table ${myTeam ?? 'spectator'}`} onDragOver={allow}>
+              <div className="wr-label-row">
+                <span className="wr-label">04 · {myTeam ? `${myTeam} draft` : 'Choose a side to draft'}</span>
+                <span className={`wr-points ${overCap ? 'over' : ''}`}>
+                  CREW {pointsUsed}/{CREW_POINTS_CAP} <span className="wr-burn">· est. burn ${estBurn.toFixed(4)}/round</span>
+                </span>
+              </div>
 
-            <div className={`wr-tier field ${field.length === 0 ? 'empty' : ''}`} onDrop={onDrop('field')} onDragOver={allow}>
-              <div className="wr-tier-tag">▣ FIELD</div>
-              <div className="wr-counters">
-                {field.length === 0 && <div className="wr-drop">drop Workers here</div>}
-                {field.map((u) => <Counter key={u.uid} u={u} onRemove={() => removeUnit(u.uid)} />)}
+              <div className={`wr-tier command ${command.length === 0 ? 'empty' : ''}`} onDrop={onDrop('command')} onDragOver={allow}>
+                <div className="wr-tier-tag">◆ COMMAND</div>
+                <div className="wr-counters">
+                  {command.length === 0 && <div className="wr-drop">drop one Lead here</div>}
+                  {command.map((u) => <Counter key={u.uid} u={u} locked={!canEdit} onRemove={() => removeUnit(u.uid)} />)}
+                </div>
+              </div>
+
+              <div className="wr-spine"><span>{locked ? 'draft locked' : 'live draft syncs to spacetime'}</span></div>
+
+              <div className={`wr-tier field ${field.length === 0 ? 'empty' : ''}`} onDrop={onDrop('field')} onDragOver={allow}>
+                <div className="wr-tier-tag">▣ FIELD</div>
+                <div className="wr-counters">
+                  {field.length === 0 && <div className="wr-drop">drop Workers here</div>}
+                  {field.map((u) => <Counter key={u.uid} u={u} locked={!canEdit} onRemove={() => removeUnit(u.uid)} />)}
+                </div>
+              </div>
+
+              <div className="wr-dispatch">
+                <div className="wr-callsign">
+                  <span className="wr-label">Callsign</span>
+                  <input className="wr-input cs" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <button className="wr-launch" disabled={!canEdit || overCap || units.length === 0 || command.length === 0} onClick={lockDraft}>
+                  {locked ? 'LOCKED' : overCap ? 'OVER CREW CAP' : !myTeam ? 'JOIN A SIDE' : `LOCK ${myTeam.toUpperCase()} DRAFT`}
+                </button>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* dispatch / launch */}
-        <div className="wr-dispatch">
-          <div className="wr-callsign">
-            <span className="wr-label">Callsign</span>
-            <input className="wr-input cs" value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <button className="wr-launch" disabled={!isActive || phase !== 'idle' || units.length === 0 || overCap} onClick={launch}>
-            {phase !== 'idle' ? 'DEPLOYING…' : overCap ? 'OVER CREW CAP' : units.length === 0 ? 'ASSEMBLE A FORCE' : `▸ DEPLOY · ${units.length} UNITS`}
-          </button>
-        </div>
-
-        {joinable.length > 0 && (
+        {!room && setupRooms.length > 0 && (
           <div className="wr-join">
-            <span className="wr-label">Active operations</span>
-            {joinable.map((r: any) => (
-              <button key={String(r.id)} className="wr-chip" onClick={() => { conn?.reducers.joinRoom({ roomId: r.id, displayName: name }); onEnter(r.id, units.map((u) => u.model)); }}>
-                {r.name} #{String(r.id)}
+            <span className="wr-label">Open lobbies</span>
+            {setupRooms.map((r: any) => {
+              const ops = operators.filter((o: any) => o.roomId === r.id);
+              const hasBlue = ops.some((o: any) => o.team === 'blue');
+              const hasRed = ops.some((o: any) => o.team === 'red');
+              return (
+                <span key={String(r.id)} className="wr-roomgroup">
+                  <button className="wr-chip" disabled={hasBlue} onClick={() => joinSide(r.id, 'blue')}>{r.name} #{String(r.id)} Blue</button>
+                  <button className="wr-chip red" disabled={hasRed} onClick={() => joinSide(r.id, 'red')}>Red</button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {!room && runningRooms.length > 0 && (
+          <div className="wr-join">
+            <span className="wr-label">Live battles</span>
+            {runningRooms.map((r: any) => (
+              <button key={String(r.id)} className="wr-chip" onClick={() => joinSide(r.id, 'spectator')}>
+                Watch #{String(r.id)}
               </button>
             ))}
           </div>
@@ -185,11 +361,28 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, preRoomId
   );
 }
 
-function MarketCard({ m, onAdd }: { m: ModelCard; onAdd: () => void }) {
+function TeamPanel({ team, op, draft, isMe, canJoin, onJoin }: any) {
+  const locked = Boolean(op?.ready);
+  const units = countRows(draft);
+  const points = pointsForRows(draft);
+  return (
+    <div className={`wr-team ${team} ${locked ? 'locked' : ''} ${isMe ? 'me' : ''}`}>
+      <div className="wr-team-top">
+        <span>{team.toUpperCase()}</span>
+        <b>{locked ? 'LOCKED' : op ? 'DRAFTING' : 'OPEN'}</b>
+      </div>
+      <div className="wr-team-name">{op?.displayName ?? 'Waiting for commander'}</div>
+      <div className="wr-team-meta">{units} units · {points}/{CREW_POINTS_CAP} pts</div>
+      {canJoin && <button className="wr-team-join" onClick={onJoin}>{op ? 'rejoin side' : `join ${team}`}</button>}
+    </div>
+  );
+}
+
+function MarketCard({ m, disabled, onAdd }: { m: ModelCard; disabled: boolean; onAdd: () => void }) {
   return (
     <div
-      className={`wr-unit-card ${!m.beatsDeadline ? 'risky' : ''}`}
-      draggable
+      className={`wr-unit-card ${!m.beatsDeadline ? 'risky' : ''} ${disabled ? 'disabled' : ''}`}
+      draggable={!disabled}
       onDragStart={(e) => e.dataTransfer.setData('model', m.id)}
     >
       <div className="wr-uc-head">
@@ -205,19 +398,19 @@ function MarketCard({ m, onAdd }: { m: ModelCard; onAdd: () => void }) {
         <Bar label="SPD" v={m.speed} /><Bar label="QAL" v={m.quality} />
         {!m.beatsDeadline && <span className="wr-uc-late">LATE</span>}
       </div>
-      <button className="wr-uc-add" onClick={onAdd}>+ deploy</button>
+      <button className="wr-uc-add" disabled={disabled} onClick={onAdd}>+ deploy</button>
     </div>
   );
 }
 
-function Counter({ u, onRemove }: { u: Unit; onRemove: () => void }) {
+function Counter({ u, locked, onRemove }: { u: Unit; locked: boolean; onRemove: () => void }) {
   const m = modelById(u.model);
   const name = m?.name ?? u.model.split('/').pop()?.replace(/:.*$/, '') ?? u.model;
   return (
-    <div className={`wr-counter ${u.tier}`} onClick={onRemove} title="click to remove">
+    <div className={`wr-counter ${u.tier} ${locked ? 'locked' : ''}`} onClick={onRemove} title={locked ? 'draft locked' : 'click to remove'}>
       <span className="wr-counter-glyph">{u.tier === 'command' ? '◆' : '▣'}</span>
       <span className="wr-counter-name">{name}</span>
-      <span className="wr-counter-x">✕</span>
+      {!locked && <span className="wr-counter-x">X</span>}
     </div>
   );
 }

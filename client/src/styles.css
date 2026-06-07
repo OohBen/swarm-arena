@@ -526,6 +526,39 @@ body {
 }
 .wr-brief b { font-family: 'Oswald'; font-size: 11px; letter-spacing: 0.12em; color: #a8332e; margin-right: 6px; }
 
+.wr-lobbybar {
+  display: grid; grid-template-columns: 1fr minmax(320px, 520px); gap: 14px; align-items: end;
+  margin-bottom: 16px;
+}
+.wr-lobbyline { font-family: 'IBM Plex Mono'; font-size: 11px; color: #4a4536; line-height: 1.5; }
+.wr-share { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: stretch; }
+.wr-share .wr-input { min-width: 0; }
+
+.wr-commanders {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 22px;
+}
+.wr-team {
+  border: 1.5px solid #1f1b14; background: #efe9d8; padding: 12px 14px;
+  box-shadow: 3px 3px 0 rgba(31,27,20,0.16); position: relative;
+}
+.wr-team.blue { border-left: 7px solid #2e5a8c; }
+.wr-team.red { border-left: 7px solid #a8332e; }
+.wr-team.me { outline: 2px solid rgba(31,27,20,0.18); }
+.wr-team.locked { background: #eaf0f6; }
+.wr-team.red.locked { background: #f2dfd7; }
+.wr-team-top { display: flex; justify-content: space-between; align-items: center; font-family: 'Oswald'; font-size: 11px; letter-spacing: 0.16em; }
+.wr-team.blue .wr-team-top span { color: #2e5a8c; }
+.wr-team.red .wr-team-top span { color: #a8332e; }
+.wr-team-top b { color: #6b6553; font-size: 9px; }
+.wr-team-name { font-family: 'Saira Condensed'; font-weight: 800; font-size: 26px; line-height: 1; margin: 9px 0 5px; }
+.wr-team-meta { font-family: 'IBM Plex Mono'; font-size: 10px; color: #6b6553; }
+.wr-team-join {
+  position: absolute; right: 10px; bottom: 10px; cursor: pointer;
+  font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  background: transparent; color: #1f1b14; border: 1.5px solid #1f1b14; padding: 5px 9px;
+}
+.wr-team-join:hover { background: #1f1b14; color: #f4efe0; }
+
 .wr-grid { display: grid; grid-template-columns: 1fr; gap: 22px; }
 
 /* roster / market — responsive card grid so it never becomes a tall column */
@@ -537,6 +570,7 @@ body {
 }
 .wr-unit-card:active { cursor: grabbing; }
 .wr-unit-card.risky { background: #f1e7d2; }
+.wr-unit-card.disabled { opacity: 0.55; cursor: not-allowed; }
 .wr-uc-head { display: flex; justify-content: space-between; align-items: baseline; }
 .wr-uc-name { font-family: 'Saira Condensed'; font-weight: 700; font-size: 17px; }
 .wr-uc-pts { font-family: 'Oswald'; font-weight: 700; font-size: 15px; color: #2e5a8c; }
@@ -553,6 +587,8 @@ body {
 .wr-uc-late { font-family: 'Oswald'; font-size: 9px; letter-spacing: 0.1em; color: #a8332e; border: 1px solid #a8332e; padding: 0 4px; }
 .wr-uc-add { margin-top: 9px; width: 100%; cursor: pointer; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; padding: 6px; background: transparent; border: 1.5px solid #1f1b14; color: #1f1b14; }
 .wr-uc-add:hover { background: #1f1b14; color: #f4efe0; }
+.wr-uc-add:disabled { opacity: 0.35; cursor: not-allowed; }
+.wr-uc-add:disabled:hover { background: transparent; color: #1f1b14; }
 .wr-custom { display: flex; gap: 6px; margin-top: 10px; }
 .wr-input { flex: 1; background: #f4efe0; border: 1.5px solid #1f1b14; padding: 7px 9px; font-family: 'IBM Plex Mono'; font-size: 11px; color: #1f1b14; }
 .wr-input:focus { outline: none; border-color: #2e5a8c; }
@@ -577,8 +613,12 @@ body {
   background: #f4efe0; border: 1.5px solid #2e5a8c; padding: 7px 11px; box-shadow: 2px 2px 0 rgba(46,90,140,0.3);
 }
 .wr-counter.command { border-width: 2px; background: #eaf0f6; }
+.wr-table.red .wr-counter { border-color: #a8332e; box-shadow: 2px 2px 0 rgba(168,51,46,0.26); }
+.wr-table.red .wr-counter.command { background: #f2dfd7; }
+.wr-table.red .wr-counter-glyph { color: #a8332e; }
+.wr-counter.locked { cursor: default; opacity: 0.88; }
 .wr-counter:hover { background: #fff; }
-.wr-counter:hover .wr-counter-x { opacity: 1; }
+.wr-counter:not(.locked):hover .wr-counter-x { opacity: 1; }
 .wr-counter-glyph { color: #2e5a8c; font-size: 12px; }
 .wr-counter-name { font-family: 'Saira Condensed'; font-weight: 700; font-size: 15px; }
 .wr-counter-x { font-size: 9px; color: #a8332e; opacity: 0; }
@@ -588,6 +628,7 @@ body {
 
 /* dispatch + launch */
 .wr-dispatch { display: flex; align-items: flex-end; gap: 16px; margin-top: 24px; padding-top: 18px; border-top: 1.5px solid #1f1b14; }
+.wr-dispatch.compact { margin-top: 8px; }
 .wr-callsign { display: flex; flex-direction: column; gap: 6px; }
 .wr-input.cs { font-family: 'Saira Condensed'; font-weight: 700; font-size: 18px; width: 200px; }
 .wr-launch {
@@ -602,6 +643,10 @@ body {
 .wr-join { margin-top: 18px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wr-chip { cursor: pointer; font-family: 'IBM Plex Mono'; font-size: 11px; padding: 5px 10px; background: #efe9d8; border: 1.5px solid #1f1b14; }
 .wr-chip:hover { background: #2e5a8c; color: #f4efe0; }
+.wr-chip.red:hover { background: #a8332e; }
+.wr-chip:disabled { opacity: 0.35; cursor: not-allowed; }
+.wr-chip:disabled:hover { background: #efe9d8; color: #1f1b14; }
+.wr-roomgroup { display: inline-flex; gap: 2px; }
 
 /* ============================ WAR BOARD (run view) ====================== */
 .wb {
@@ -657,6 +702,7 @@ body {
 .wb-kv b { font-family: 'Saira Condensed'; font-weight: 600; font-size: 13px; color: #1f1b14; text-align: right; }
 .wb-kv.col b { text-align: left; font-family: 'IBM Plex Sans'; font-weight: 400; font-size: 12px; line-height: 1.4; }
 .wb-deploy { font-family: 'IBM Plex Mono'; font-size: 8.5px; color: #6b6553; background: #ded7c2; border: 1px solid rgba(31,27,20,0.3); padding: 6px 7px; margin: 6px 0 9px; word-break: break-all; line-height: 1.5; }
+.wb-deploy.share { color: #2e5a8c; background: #eaf0f6; }
 .wb-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .wb-btn { cursor: pointer; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 7px; background: transparent; border: 1.5px solid #1f1b14; color: #1f1b14; }
 .wb-btn:hover { background: #1f1b14; color: #f4efe0; }
@@ -805,6 +851,8 @@ body {
 .wb-disp-k.k-crisis_resolved { color: #2e5a8c; }
 
 @media (max-width: 1080px) {
+  .wr-lobbybar { grid-template-columns: 1fr; }
+  .wr-commanders { grid-template-columns: 1fr; }
   .wr-missions { grid-template-columns: repeat(2, 1fr); }
   .wr-brief { grid-template-columns: 1fr; }
   .wb { grid-template-rows: 50px 64px 1fr 150px; }

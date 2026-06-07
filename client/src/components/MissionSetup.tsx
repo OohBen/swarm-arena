@@ -182,7 +182,7 @@ export function MissionSetup({ conn, identity, isActive, rooms, goals, preRoomId
             <span className="micro">Join active expedition</span>
             <div className="rooms">
               {joinable.map((r: any) => (
-                <button key={String(r.id)} className="room-chip" onClick={() => { conn?.reducers.joinRoom({ roomId: r.id, displayName: name }); onEnter(r.id, crewSpec.flatMap((s) => Array(s.count).fill(s.model))); }}>
+                <button key={String(r.id)} className="room-chip" onClick={() => { conn?.reducers.joinRoom({ roomId: r.id, displayName: name, team: 'blue' }); onEnter(r.id, crewSpec.flatMap((s) => Array(s.count).fill(s.model))); }}>
                   {r.name} #{String(r.id)}
                 </button>
               ))}

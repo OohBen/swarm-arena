@@ -13,4 +13,5 @@ import {
 export default {
   roomId: __t.u64(),
   displayName: __t.string(),
+  team: __t.string(),
 };

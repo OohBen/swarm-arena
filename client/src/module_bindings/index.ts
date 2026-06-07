@@ -44,6 +44,7 @@ import JoinRoomReducer from "./join_room_reducer";
 import PostResultReducer from "./post_result_reducer";
 import RegisterAgentReducer from "./register_agent_reducer";
 import ResolveCrisisReducer from "./resolve_crisis_reducer";
+import SubmitDraftReducer from "./submit_draft_reducer";
 import SubmitGoalReducer from "./submit_goal_reducer";
 
 // Import all procedure arg schemas
@@ -54,6 +55,7 @@ import BattleNodeRow from "./battle_node_table";
 import BattleOrderRow from "./battle_order_table";
 import CrewSlotRow from "./crew_slot_table";
 import CrisisRow from "./crisis_table";
+import DraftSlotRow from "./draft_slot_table";
 import EventRow from "./event_table";
 import GoalRow from "./goal_table";
 import OperatorRow from "./operator_table";
@@ -155,6 +157,20 @@ const tablesSchema = __schema({
       { name: 'crisis_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, CrisisRow),
+  draftSlot: __table({
+    name: 'draft_slot',
+    indexes: [
+      { accessor: 'id', name: 'draft_slot_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'room_id', name: 'draft_slot_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'draft_slot_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, DraftSlotRow),
   event: __table({
     name: 'event',
     indexes: [
@@ -274,6 +290,7 @@ const reducersSchema = __reducers(
   __reducerSchema("post_result", PostResultReducer),
   __reducerSchema("register_agent", RegisterAgentReducer),
   __reducerSchema("resolve_crisis", ResolveCrisisReducer),
+  __reducerSchema("submit_draft", SubmitDraftReducer),
   __reducerSchema("submit_goal", SubmitGoalReducer),
 );
 

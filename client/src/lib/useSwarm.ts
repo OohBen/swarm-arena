@@ -28,6 +28,7 @@ export function useSwarm() {
         tables.agent,
         tables.event,
         tables.score,
+        tables.draftSlot,
         tables.teamState,
         tables.battleNode,
         tables.battleOrder,
@@ -42,6 +43,7 @@ export function useSwarm() {
   const [agents] = useTable(tables.agent);
   const [events] = useTable(tables.event);
   const [scores] = useTable(tables.score);
+  const [draftSlots] = useTable(tables.draftSlot);
   const [teamStates] = useTable(tables.teamState);
   const [battleNodes] = useTable(tables.battleNode);
   const [battleOrders] = useTable(tables.battleOrder);
@@ -59,6 +61,7 @@ export function useSwarm() {
     agents: agents as any[],
     events: events as any[],
     scores: scores as any[],
+    draftSlots: draftSlots as any[],
     teamStates: teamStates as any[],
     battleNodes: battleNodes as any[],
     battleOrders: battleOrders as any[],

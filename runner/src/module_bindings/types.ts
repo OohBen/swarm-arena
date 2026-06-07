@@ -105,6 +105,18 @@ export const CrisisTimer = __t.object("CrisisTimer", {
 });
 export type CrisisTimer = __Infer<typeof CrisisTimer>;
 
+export const DraftSlot = __t.object("DraftSlot", {
+  id: __t.u64(),
+  roomId: __t.u64(),
+  team: __t.string(),
+  role: __t.string(),
+  model: __t.string(),
+  count: __t.u32(),
+  updatedBy: __t.identity(),
+  updatedAt: __t.timestamp(),
+});
+export type DraftSlot = __Infer<typeof DraftSlot>;
+
 export const Event = __t.object("Event", {
   id: __t.u64(),
   roomId: __t.u64(),
@@ -136,6 +148,8 @@ export const Operator = __t.object("Operator", {
   identity: __t.identity(),
   roomId: __t.u64(),
   displayName: __t.string(),
+  team: __t.string(),
+  ready: __t.bool(),
   selectedTaskId: __t.option(__t.u64()),
   lastHeartbeat: __t.timestamp(),
 });

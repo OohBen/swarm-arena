@@ -16,6 +16,7 @@ import JoinRoomReducer from "../join_room_reducer";
 import PostResultReducer from "../post_result_reducer";
 import RegisterAgentReducer from "../register_agent_reducer";
 import ResolveCrisisReducer from "../resolve_crisis_reducer";
+import SubmitDraftReducer from "../submit_draft_reducer";
 import SubmitGoalReducer from "../submit_goal_reducer";
 
 export type ClaimTaskParams = __Infer<typeof ClaimTaskReducer>;
@@ -28,5 +29,6 @@ export type JoinRoomParams = __Infer<typeof JoinRoomReducer>;
 export type PostResultParams = __Infer<typeof PostResultReducer>;
 export type RegisterAgentParams = __Infer<typeof RegisterAgentReducer>;
 export type ResolveCrisisParams = __Infer<typeof ResolveCrisisReducer>;
+export type SubmitDraftParams = __Infer<typeof SubmitDraftReducer>;
 export type SubmitGoalParams = __Infer<typeof SubmitGoalReducer>;
 

@@ -14,6 +14,8 @@ export default __t.row({
   identity: __t.identity().primaryKey(),
   roomId: __t.u64().name("room_id"),
   displayName: __t.string().name("display_name"),
+  team: __t.string(),
+  ready: __t.bool(),
   selectedTaskId: __t.option(__t.u64()).name("selected_task_id"),
   lastHeartbeat: __t.timestamp().name("last_heartbeat"),
 });

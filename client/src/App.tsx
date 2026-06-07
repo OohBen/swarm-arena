@@ -6,19 +6,40 @@ import { Scoreboard } from './components/Scoreboard';
 
 export default function App() {
   const swarm = useSwarm();
-  const { conn, identity, isActive, subscribed, goals, tasks, agents, events, scores, operators, crises, teamStates, battleNodes, battleOrders } = swarm;
+  const { conn, identity, isActive, subscribed, goals, tasks, agents, events, scores, operators, draftSlots, crises, teamStates, battleNodes, battleOrders } = swarm;
 
   const [roomId, setRoomId] = useState<bigint | null>(null);
   const [selectedId, setSelectedId] = useState<bigint | null>(null);
   const [view, setView] = useState<'live' | 'board'>('live');
-  const [crew, setCrew] = useState<string[]>([
-    'openai/gpt-oss-120b:nitro',
-    'openai/gpt-oss-120b:nitro',
-    'z-ai/glm-4.7:nitro',
-  ]);
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('room');
+    if (id && /^\d+$/.test(id)) setRoomId(BigInt(id));
+  }, []);
+
+  const enterRoom = (id: bigint) => {
+    setRoomId(id);
+    setSelectedId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set('room', String(id));
+    window.history.replaceState(null, '', url);
+  };
+
+  const leaveRoom = () => {
+    setRoomId(null);
+    setSelectedId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('room');
+    window.history.replaceState(null, '', url);
+  };
 
   const activeGoal =
     roomId != null ? goals.find((g: any) => g.roomId === roomId && g.status !== 'stopped') ?? null : null;
+  const currentRoom = roomId != null ? swarm.rooms.find((r: any) => r.id === roomId) ?? null : null;
+  const roomOps = roomId != null ? operators.filter((o: any) => o.roomId === roomId) : [];
+  const myOp = identity ? roomOps.find((o: any) => o.identity?.toHexString() === identity.toHexString()) ?? null : null;
+  const myTeam = myOp && (myOp.team === 'blue' || myOp.team === 'red') ? myOp.team : null;
+  const shareUrl = roomId != null ? `${window.location.origin}${window.location.pathname}?room=${String(roomId)}` : '';
 
   // Operator presence heartbeat while in a room.
   useEffect(() => {
@@ -51,11 +72,12 @@ export default function App() {
         isActive={isActive}
         rooms={swarm.rooms}
         goals={goals}
+        operators={operators}
+        draftSlots={draftSlots}
         preRoomId={roomId}
-        onEnter={(id: bigint, chosen?: string[]) => {
-          setRoomId(id);
-          if (chosen && chosen.length) setCrew(chosen);
-        }}
+        currentRoom={currentRoom}
+        onEnter={enterRoom}
+        onExit={leaveRoom}
       />
     );
   }
@@ -63,14 +85,13 @@ export default function App() {
   const roomTasks = tasks.filter((t: any) => t.roomId === roomId);
   const roomAgents = agents.filter((a: any) => a.roomId === roomId);
   const roomEvents = events.filter((e: any) => e.roomId === roomId);
-  const roomOps = operators.filter((o: any) => o.roomId === roomId);
   const roomTeamStates = teamStates.filter((s: any) => s.roomId === roomId && s.goalId === activeGoal.id);
   const roomBattleNodes = battleNodes.filter((n: any) => n.roomId === roomId && n.goalId === activeGoal.id);
   const roomBattleOrders = battleOrders.filter((o: any) => o.roomId === roomId && o.goalId === activeGoal.id);
   const score = scores.find((s: any) => s.goalId === activeGoal.id) ?? null;
   const selectedTask = selectedId != null ? roomTasks.find((t: any) => t.id === selectedId) ?? null : null;
 
-  const runnerCmd = `SWARM_ROOM=${roomId} npx tsx src/index.ts --agents "${crew.join(',')}"`;
+  const runnerCmd = 'Cloud runner staffs Blue and Red from locked lobby drafts';
 
   if (view === 'board') {
     return (
@@ -100,10 +121,12 @@ export default function App() {
       crises={crises.filter((c: any) => c.roomId === roomId && c.status === 'active')}
       roomId={roomId}
       conn={conn}
+      myTeam={myTeam}
+      shareUrl={shareUrl}
       selectedId={selectedId}
       setSelectedId={setSelectedId}
       runnerCmd={runnerCmd}
-      onNewOp={() => { setRoomId(null); setSelectedId(null); }}
+      onNewOp={leaveRoom}
       onBoard={() => setView('board')}
     />
   );

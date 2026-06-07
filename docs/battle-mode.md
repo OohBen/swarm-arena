@@ -1,6 +1,6 @@
 # Swarm Arena Battle Mode
 
-Status: implemented locally and verified, June 7, 2026. Cloud deploy requires a production schema wipe approval.
+Status: multiplayer lobby and battle mode implemented locally and verified, June 7, 2026.
 
 ## One-line pitch
 
@@ -10,15 +10,15 @@ Two AI swarms fight over the same live SpacetimeDB battle map. Humans are comman
 
 This is a mix of territory control and HQ capture.
 
-- Blue swarm: player-managed, mostly AI-operated.
-- Red swarm: rival AI swarm using the same rules and reducers. Human-vs-human can be added later.
+- Blue swarm: drafted and commanded by one human.
+- Red swarm: drafted and commanded by a second human.
 - Primary win: capture/crack the enemy HQ.
 - Secondary win: if the clock or supplies expire, the team with stronger map control wins.
 - The match must be watchable for several minutes, not a chore race that ends in one burst.
 
 Current tuning:
 
-- Default draft: 1 command model + 2 field models for Blue, mirrored to Red.
+- Default draft: each side starts from 1 command model + 2 field models, then can customize independently before locking.
 - Deadline: 3 seconds per combat action.
 - Runner pace: 8 seconds between actions by default.
 - Reducer cap: 2 active battle tasks per team, plus human orders.
@@ -39,13 +39,13 @@ In the demo, say: "Our combat system is the blackboard problem. The database red
 
 ## Player loop
 
-1. Pick the battlefield scenario.
-2. Draft a Blue swarm from the OpenRouter model roster.
-3. Start the battle against a Red AI swarm.
+1. Blue hosts a battlefield room and sends the room URL to Red.
+2. Blue and Red each draft a swarm from the OpenRouter model roster.
+3. Both commanders lock their drafts. The `submit_draft` reducer starts the match only after both sides are ready and valid.
 4. Watch both swarms race for neutral ground and probe each other's front line.
-5. Spend limited command orders to swing a live node.
-6. Watch the immediate command surge land, then see Blue agents carry the order through the reducer queue while Red keeps advancing through the same rules.
-7. Win by cracking Red HQ, or by holding more ground when the timer/supplies run out.
+5. Spend limited command orders for your own side to swing a live node.
+6. Watch the immediate command surge land, then see your agents carry the order through the reducer queue while the enemy keeps advancing through the same rules.
+7. Win by cracking enemy HQ, or by holding more ground when the timer/supplies run out.
 
 Humans should feel like commanders, not task workers. The fun is deciding where to push, when to defend, and when to spend a scarce order.
 
@@ -129,17 +129,21 @@ Fast models matter because slow agents miss tempo windows. Expensive models can 
 
 Keep the module TypeScript-only.
 
-Likely table additions or changes:
+Table additions or changes:
 
+- `operator`: now carries `team` and `ready`, so humans claim Blue/Red and lock drafts.
+- `draft_slot`: pre-battle team drafts. Copied into `crew_slot` when both sides lock.
 - `team_state`: room, team, supply, morale, command tokens, hq integrity, status.
 - `battle_node`: room, node key, lane, kind, owner, position, adjacency, fortification, pressure, HQ integrity.
 - `battle_order`: room, team, target node, order type, priority, expires at, issued by.
 - `battle_result`: optional per-action combat telemetry for scoring and replay.
 - Existing `task`: add team, target node, action type, and combat fields, or replace mission tasks with battle tasks for this mode.
 
-Likely reducers:
+Reducers:
 
-- `start_battle`: creates Blue/Red teams, map nodes, HQs, crew slots, and opening tasks.
+- `create_room`: creates a setup lobby and assigns the creator to Blue.
+- `join_room`: assigns a second human to Red or a spectator seat; side claim is atomic.
+- `submit_draft`: writes a team's draft, locks readiness, validates both teams, and starts the battle once both sides are ready.
 - `issue_order`: human spends command token and writes an order.
 - `claim_task`: keep atomic; scope by team, role, target node, and current battle state.
 - `post_result`: applies structured agent result to node/team state and spawns follow-up tasks.
@@ -190,12 +194,12 @@ After-action report should show:
 
 ## Demo beat
 
-1. Start Blue vs Red on a three-lane map.
-2. Both swarms rush neutral relays.
-3. One contested relay is decided by an atomic claim.
-4. Red starts pushing a flank.
-5. Human marks "hold this" and spends a reinforce order.
-6. Blue commander agent exploits center lane.
-7. Blue cracks Red HQ, or wins by territory when supplies expire.
+1. Blue opens a room; Red joins from the room link.
+2. Both humans draft different AI fleets and lock.
+3. SpacetimeDB starts Blue vs Red on a three-lane map.
+4. Both swarms rush neutral relays.
+5. One contested relay is decided by an atomic claim.
+6. Each human spends a command order on the same contested node.
+7. The map shifts live, then AI agents keep fighting from the updated state.
 
 The judge-facing story: "This is multiplayer state, AI coordination, and transactional combat all using SpacetimeDB as the core backend."

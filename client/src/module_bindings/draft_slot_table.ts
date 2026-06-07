@@ -10,8 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  roomId: __t.u64(),
-  displayName: __t.string(),
+export default __t.row({
+  id: __t.u64().primaryKey(),
+  roomId: __t.u64().name("room_id"),
   team: __t.string(),
-};
+  role: __t.string(),
+  model: __t.string(),
+  count: __t.u32(),
+  updatedBy: __t.identity().name("updated_by"),
+  updatedAt: __t.timestamp().name("updated_at"),
+});

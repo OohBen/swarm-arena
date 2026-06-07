@@ -93,7 +93,7 @@ function CrisisAlert({ crises, conn }: any) {
   );
 }
 
-export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], battleNodes = [], battleOrders = [], events, ops, crises, roomId, conn, selectedId, setSelectedId, runnerCmd, onNewOp, onBoard }: any) {
+export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], battleNodes = [], battleOrders = [], events, ops, crises, roomId, conn, myTeam, shareUrl, selectedId, setSelectedId, runnerCmd, onNewOp, onBoard }: any) {
   const hasBattle = battleNodes.length > 0;
   const { nodes, edges, width, height } = useMemo(() => layout(tasks), [tasks]);
   const total = tasks.length;
@@ -103,6 +103,9 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
   const working = agents.filter((a: any) => a.status === 'working').length;
   const blueTeam = teamStates.find((s: any) => s.team === 'blue') ?? null;
   const redTeam = teamStates.find((s: any) => s.team === 'red') ?? null;
+  const myTeamState = myTeam ? teamStates.find((s: any) => s.team === myTeam) ?? null : null;
+  const blueOp = ops.find((o: any) => o.team === 'blue') ?? null;
+  const redOp = ops.find((o: any) => o.team === 'red') ?? null;
   const blueTerritory = battleNodes.filter((n: any) => n.owner === 'blue').length;
   const redTerritory = battleNodes.filter((n: any) => n.owner === 'red').length;
   const contested = battleNodes.filter((n: any) => n.status === 'contested' || n.status === 'damaged').length;
@@ -150,7 +153,8 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
             <Stat k="Red HQ" v={`${redTeam?.hqIntegrity ?? 100}%`} tone={(redTeam?.hqIntegrity ?? 100) > 35 ? 'bad' : 'good'} />
             <Stat k="Territory" v={`${blueTerritory}-${redTerritory}`} tone={blueTerritory >= redTerritory ? 'good' : 'warn'} />
             <Stat k="Contested" v={contested} tone={contested ? 'live' : ''} />
-            <Stat k="Orders" v={blueTeam?.commandTokens ?? 0} tone={(blueTeam?.commandTokens ?? 0) > 0 ? 'good' : 'warn'} />
+            <Stat k="My Side" v={myTeam ? myTeam.toUpperCase() : 'WATCH'} tone={myTeam === 'blue' ? 'good' : myTeam === 'red' ? 'bad' : ''} />
+            <Stat k="Orders" v={myTeamState?.commandTokens ?? 0} tone={(myTeamState?.commandTokens ?? 0) > 0 ? 'good' : 'warn'} />
           </>
         ) : (
           <>
@@ -181,6 +185,9 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
             <div className="wb-slip-h">COMMAND DECK · OP #{String(roomId)}</div>
             <div className="wb-slip-b">
               <div className="wb-kv"><span>Commanders</span><b>{ops.map((o: any) => o.displayName).join(', ') || '—'}</b></div>
+              <div className="wb-kv"><span>Blue</span><b>{blueOp?.displayName ?? '—'}</b></div>
+              <div className="wb-kv"><span>Red</span><b>{redOp?.displayName ?? '—'}</b></div>
+              {shareUrl && <div className="wb-deploy share">{shareUrl}</div>}
               <div className="wb-deploy" title={runnerCmd}>{agents.length > 0 ? 'AUTONOMOUS FLEETS ONLINE' : 'AWAITING FLEET DAEMON'}</div>
               <div className="wb-btns">
                 <button className={`wb-btn ${complete || stopped ? 'hot' : ''}`} onClick={onBoard}>After-Action</button>
@@ -264,7 +271,7 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
             <div className="wb-slip-b">
               {hasBattle ? (
                 !selNode ? <div className="wb-empty">Select a battlefield node to issue commander orders.</div> : (
-                  <BattleOrders node={selNode} teamStates={teamStates} battleOrders={battleOrders} tasks={tasks} agents={agents} roomId={roomId} conn={conn} />
+                  <BattleOrders node={selNode} team={myTeam} teamStates={teamStates} battleOrders={battleOrders} tasks={tasks} agents={agents} roomId={roomId} conn={conn} />
                 )
               ) : !selTask ? <div className="wb-empty">Select an objective to issue commander orders.</div> : (
                 <Orders task={selTask} agents={agents} roomId={roomId} conn={conn} />
@@ -377,21 +384,24 @@ function BattleMap({ nodes, tasks, orders, selectedId, setSelectedId }: any) {
   );
 }
 
-function BattleOrders({ node, teamStates, battleOrders, tasks, agents, roomId, conn }: any) {
-  const blue = teamStates.find((s: any) => s.team === 'blue');
-  const tokens = blue?.commandTokens ?? 0;
+function BattleOrders({ node, team, teamStates, battleOrders, tasks, agents, roomId, conn }: any) {
+  const teamState = team ? teamStates.find((s: any) => s.team === team) : null;
+  const tokens = teamState?.commandTokens ?? 0;
   const limit = captureLimit(node);
   const bluePct = clamp((num(node.bluePressure) / limit) * 100, 0, 100);
   const redPct = clamp((num(node.redPressure) / limit) * 100, 0, 100);
-  const nodeTasks = tasks.filter((t: any) => t.targetNodeId === node.id);
+  const nodeTasks = tasks.filter((t: any) => t.targetNodeId === node.id && (!team || t.team === team));
   const active = nodeTasks.filter((t: any) => t.status === 'pending' || t.status === 'claimed');
   const assigned = active
     .map((t: any) => (t.assignedAgentId != null ? agents.find((a: any) => a.id === t.assignedAgentId)?.name : null))
     .filter(Boolean)
     .join(', ');
-  const orders = battleOrders.filter((o: any) => o.targetNodeId === node.id && o.status === 'active');
-  const canOrder = tokens > 0;
-  const issue = (orderType: string) => conn?.reducers.issueOrder({ roomId, targetNodeId: node.id, orderType, team: 'blue' });
+  const orders = battleOrders.filter((o: any) => o.targetNodeId === node.id && o.status === 'active' && (!team || o.team === team));
+  const canOrder = Boolean(team) && tokens > 0;
+  const issue = (orderType: string) => {
+    if (!team) return;
+    conn?.reducers.issueOrder({ roomId, targetNodeId: node.id, orderType, team });
+  };
 
   return (
     <>
@@ -420,14 +430,16 @@ function BattleOrders({ node, teamStates, battleOrders, tasks, agents, roomId, c
           {orders.map((o: any) => <span key={String(o.id)}>{o.orderType}</span>)}
         </div>
       )}
-      <div className="wb-orderlabel">COMMAND TOKENS · {tokens}</div>
+      <div className="wb-orderlabel">{team ? `${team.toUpperCase()} COMMAND TOKENS` : 'SPECTATOR MODE'} · {tokens}</div>
       <div className="wb-ord-grid">
         <button className="wb-ord primary" disabled={!canOrder} onClick={() => issue('assault')}>Assault</button>
         <button className="wb-ord" disabled={!canOrder} onClick={() => issue(node.owner === 'blue' ? 'reinforce' : 'defend')}>{node.owner === 'blue' ? 'Reinforce' : 'Hold'}</button>
         <button className="wb-ord" disabled={!canOrder} onClick={() => issue('sabotage')}>Sabotage</button>
         <button className="wb-ord" disabled={!canOrder} onClick={() => issue('scout')}>Scout</button>
       </div>
-      <div className="wb-orderhint">Orders immediately shift the node, then Blue agents carry it through the reducer queue.</div>
+      <div className="wb-orderhint">
+        {team ? `Orders immediately shift the node, then ${team.toUpperCase()} agents carry it through the reducer queue.` : 'Join Blue or Red from the lobby to issue orders.'}
+      </div>
     </>
   );
 }

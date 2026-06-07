@@ -21,6 +21,8 @@ const CRISIS_COOLDOWN_MICROS = 28_000_000n; // avoid crisis spam
 const BATTLE_INTERVAL_MICROS = 4_000_000n; // battle director cadence
 const MAX_COMMAND_TOKENS = 3;
 const MAX_ACTIVE_BATTLE_TASKS = 2;
+const DRAFT_POINTS_CAP = 14;
+const MAX_DRAFT_UNITS = 12;
 const NEUTRAL_CAPTURE_THRESHOLD = 160;
 const CAPTURE_THRESHOLD = 220;
 const HQ_MAX_INTEGRITY = 100;
@@ -31,6 +33,17 @@ const CRISIS_MSG: Record<string, string> = {
   dust_storm: 'Dust storm grounding the crew — work is stalling.',
   supply_leak: 'Coolant leak detected — supplies are bleeding out.',
   equipment_failure: 'Critical equipment failure on an objective.',
+};
+
+const MODEL_POINTS: Record<string, number> = {
+  'openai/gpt-oss-120b:nitro': 2,
+  'z-ai/glm-4.7:nitro': 4,
+  'inception/mercury-2:nitro': 3,
+  'google/gemini-3.1-flash-lite:nitro': 3,
+  'z-ai/glm-4.7-flash:nitro': 1,
+  'x-ai/grok-4.3:nitro': 6,
+  'google/gemini-3.5-flash:nitro': 4,
+  'deepseek/deepseek-v4-flash:nitro': 2,
 };
 
 // Score deltas (points is i64 -> bigint)
@@ -62,6 +75,8 @@ const operator = table(
     identity: t.identity().primaryKey(),
     room_id: t.u64().index('btree'),
     display_name: t.string(),
+    team: t.string(), // 'blue' | 'red' | 'spectator'
+    ready: t.bool(),
     selected_task_id: t.option(t.u64()),
     last_heartbeat: t.timestamp(),
   }
@@ -179,6 +194,22 @@ const crewSlot = table(
     team: t.string(), // 'blue' | 'red'
     model: t.string(),
     count: t.u32(),
+  }
+);
+
+// Draft rows live before the battle starts. Each human commander owns exactly
+// one side, and these rows are copied into crew_slot when both sides lock.
+const draftSlot = table(
+  { name: 'draft_slot', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    room_id: t.u64().index('btree'),
+    team: t.string(), // 'blue' | 'red'
+    role: t.string(), // 'lead' | 'worker' | 'reviewer'
+    model: t.string(),
+    count: t.u32(),
+    updated_by: t.identity(),
+    updated_at: t.timestamp(),
   }
 );
 
@@ -309,6 +340,7 @@ const spacetimedb = schema({
   event,
   score,
   crewSlot,
+  draftSlot,
   teamState,
   battleNode,
   battleOrder,
@@ -340,6 +372,181 @@ function emit(ctx: any, room_id: bigint, kind: string, message: string, opts: Ev
     message,
     created_at: ctx.timestamp,
   });
+}
+
+function sameIdentity(a: any, b: any): boolean {
+  if (!a || !b) return false;
+  return typeof a.equals === 'function' ? a.equals(b) : String(a) === String(b);
+}
+
+function isPlayableTeam(team: string): boolean {
+  return team === 'blue' || team === 'red';
+}
+
+function modelPoints(model: string): number {
+  if (MODEL_POINTS[model] !== undefined) return MODEL_POINTS[model];
+  const noRoute = model.replace(/:nitro$/, '');
+  const matched = Object.keys(MODEL_POINTS).find((id) => id.replace(/:nitro$/, '') === noRoute);
+  return matched ? MODEL_POINTS[matched] : 3;
+}
+
+function draftRows(ctx: any, room_id: bigint, team: string): any[] {
+  return [...ctx.db.draftSlot.room_id.filter(room_id)].filter((s: any) => s.team === team);
+}
+
+function draftStats(rows: any[]): { units: number; points: number } {
+  return rows.reduce(
+    (acc, row) => ({
+      units: acc.units + row.count,
+      points: acc.points + modelPoints(row.model) * row.count,
+    }),
+    { units: 0, points: 0 }
+  );
+}
+
+function validateDraft(rows: any[]): void {
+  const stats = draftStats(rows);
+  if (stats.units <= 0) throw new SenderError('draft needs at least one unit');
+  if (stats.units > MAX_DRAFT_UNITS) throw new SenderError('too many units');
+  if (stats.points > DRAFT_POINTS_CAP) throw new SenderError('draft over point cap');
+  if (!rows.some((s: any) => s.role === 'lead' && s.count > 0)) throw new SenderError('draft needs a command unit');
+}
+
+function teamCommander(ctx: any, room_id: bigint, team: string): any {
+  return [...ctx.db.operator.room_id.filter(room_id)].find((op: any) => op.team === team) ?? null;
+}
+
+function operatorForSender(ctx: any, room_id: bigint): any {
+  const op = ctx.db.operator.identity.find(ctx.sender);
+  return op && op.room_id === room_id ? op : null;
+}
+
+function requireTeamCommander(ctx: any, room_id: bigint, team: string): any {
+  if (!isPlayableTeam(team)) throw new SenderError('bad team');
+  const op = operatorForSender(ctx, room_id);
+  if (!op || op.team !== team) throw new SenderError('not commander for this team');
+  return op;
+}
+
+function upsertOperator(ctx: any, room_id: bigint, display_name: string, team: string, ready: boolean): void {
+  const existing = ctx.db.operator.identity.find(ctx.sender);
+  if (existing) {
+    ctx.db.operator.identity.update({
+      ...existing,
+      room_id,
+      display_name,
+      team,
+      ready,
+      selected_task_id: undefined,
+      last_heartbeat: ctx.timestamp,
+    });
+  } else {
+    ctx.db.operator.insert({
+      identity: ctx.sender,
+      room_id,
+      display_name,
+      team,
+      ready,
+      selected_task_id: undefined,
+      last_heartbeat: ctx.timestamp,
+    });
+  }
+}
+
+function assertTeamAvailable(ctx: any, room_id: bigint, team: string): void {
+  if (!isPlayableTeam(team)) return;
+  const holder = teamCommander(ctx, room_id, team);
+  if (holder && !sameIdentity(holder.identity, ctx.sender)) {
+    throw new SenderError(`${team} already has a commander`);
+  }
+}
+
+function replaceDraft(ctx: any, room_id: bigint, team: string, crew: any[]): void {
+  for (const existing of draftRows(ctx, room_id, team)) {
+    ctx.db.draftSlot.id.delete(existing.id);
+  }
+
+  for (const slot of crew) {
+    const count = Math.max(0, slot.count);
+    if (count <= 0 || slot.model.length === 0) continue;
+    const role = slot.role === 'lead' ? 'lead' : slot.role === 'reviewer' ? 'reviewer' : 'worker';
+    ctx.db.draftSlot.insert({
+      id: 0n,
+      room_id,
+      team,
+      role,
+      model: slot.model,
+      count,
+      updated_by: ctx.sender,
+      updated_at: ctx.timestamp,
+    });
+  }
+}
+
+function maybeStartBattleFromDrafts(
+  ctx: any,
+  room_id: bigint,
+  title: string,
+  max_depth: number,
+  max_tasks: number,
+  deadline_ms: bigint,
+  run_budget_micros: bigint
+): void {
+  const r = ctx.db.room.id.find(room_id);
+  if (!r || r.status !== 'setup') return;
+  if ([...ctx.db.goal.room_id.filter(room_id)].some((g: any) => g.status === 'active')) return;
+
+  const blue = teamCommander(ctx, room_id, 'blue');
+  const red = teamCommander(ctx, room_id, 'red');
+  if (!blue || !red || !blue.ready || !red.ready) return;
+
+  const blueDraft = draftRows(ctx, room_id, 'blue');
+  const redDraft = draftRows(ctx, room_id, 'red');
+  validateDraft(blueDraft);
+  validateDraft(redDraft);
+
+  const g = ctx.db.goal.insert({
+    id: 0n,
+    room_id,
+    title,
+    status: 'active',
+    max_depth,
+    max_tasks,
+    deadline_ms,
+    run_budget_micros,
+    created_by: ctx.sender,
+    created_at: ctx.timestamp,
+  });
+
+  seedBattlefield(ctx, room_id, g.id, run_budget_micros);
+
+  for (const slot of [...blueDraft, ...redDraft]) {
+    ctx.db.crewSlot.insert({
+      id: 0n,
+      room_id,
+      goal_id: g.id,
+      role: slot.role,
+      team: slot.team,
+      model: slot.model,
+      count: slot.count,
+    });
+  }
+
+  ctx.db.score.insert({
+    goal_id: g.id,
+    room_id,
+    points: 0n,
+    valid_results: 0,
+    late_results: 0,
+    invalid_results: 0,
+    human_overrides: 0,
+    estimated_cost_micros: 0n,
+  });
+
+  ctx.db.room.id.update({ ...r, status: 'running' });
+  seedOpeningTasks(ctx, room_id, g.id);
+  ensureBattleTasks(ctx, g.id, room_id);
+  emit(ctx, room_id, 'battle_started', `Battle started: ${title}`, { goal_id: g.id });
 }
 
 type ScoreCounters = {
@@ -952,54 +1159,59 @@ export const createRoom = spacetimedb.reducer(
       created_at: ctx.timestamp,
       status: 'setup',
     });
-    // Upsert presence — an operator (PK = identity) may already exist from a
-    // prior room, so updating avoids a unique-constraint abort on re-create.
-    const existingOp = ctx.db.operator.identity.find(ctx.sender);
-    if (existingOp) {
-      ctx.db.operator.identity.update({
-        ...existingOp,
-        room_id: r.id,
-        display_name,
-        selected_task_id: undefined,
-        last_heartbeat: ctx.timestamp,
-      });
-    } else {
-      ctx.db.operator.insert({
-        identity: ctx.sender,
-        room_id: r.id,
-        display_name,
-        selected_task_id: undefined,
-        last_heartbeat: ctx.timestamp,
-      });
-    }
-    emit(ctx, r.id, 'room_created', `${display_name} created room ${name}`, {
+    upsertOperator(ctx, r.id, display_name, 'blue', false);
+    emit(ctx, r.id, 'room_created', `${display_name} created lobby ${name} as BLUE`, {
       operator_id: ctx.sender,
     });
   }
 );
 
 export const joinRoom = spacetimedb.reducer(
-  { room_id: t.u64(), display_name: t.string() },
-  (ctx, { room_id, display_name }) => {
-    if (!ctx.db.room.id.find(room_id)) throw new SenderError('room not found');
-    const existing = ctx.db.operator.identity.find(ctx.sender);
-    if (existing) {
-      ctx.db.operator.identity.update({
-        ...existing,
-        room_id,
-        display_name,
-        last_heartbeat: ctx.timestamp,
-      });
-    } else {
-      ctx.db.operator.insert({
-        identity: ctx.sender,
-        room_id,
-        display_name,
-        selected_task_id: undefined,
-        last_heartbeat: ctx.timestamp,
-      });
-    }
-    emit(ctx, room_id, 'operator_joined', `${display_name} joined`, { operator_id: ctx.sender });
+  { room_id: t.u64(), display_name: t.string(), team: t.string() },
+  (ctx, { room_id, display_name, team }) => {
+    const r = ctx.db.room.id.find(room_id);
+    if (!r) throw new SenderError('room not found');
+    const claimedTeam = isPlayableTeam(team) ? team : 'spectator';
+    if (r.status === 'setup') assertTeamAvailable(ctx, room_id, claimedTeam);
+    upsertOperator(ctx, room_id, display_name, claimedTeam, false);
+    emit(ctx, room_id, 'operator_joined', `${display_name} joined as ${claimedTeam.toUpperCase()}`, { operator_id: ctx.sender });
+  }
+);
+
+export const submitDraft = spacetimedb.reducer(
+  {
+    room_id: t.u64(),
+    team: t.string(),
+    ready: t.bool(),
+    title: t.string(),
+    max_depth: t.u32(),
+    max_tasks: t.u32(),
+    deadline_ms: t.u64(),
+    run_budget_micros: t.u64(),
+    crew: t.array(CrewSpec),
+  },
+  (ctx, { room_id, team, ready, title, max_depth, max_tasks, deadline_ms, run_budget_micros, crew }) => {
+    const r = ctx.db.room.id.find(room_id);
+    if (!r) throw new SenderError('room not found');
+    if (r.status !== 'setup') throw new SenderError('draft is closed');
+
+    const op = requireTeamCommander(ctx, room_id, team);
+    replaceDraft(ctx, room_id, team, crew);
+    const rows = draftRows(ctx, room_id, team);
+    if (ready) validateDraft(rows);
+
+    ctx.db.operator.identity.update({
+      ...op,
+      ready,
+      selected_task_id: undefined,
+      last_heartbeat: ctx.timestamp,
+    });
+
+    const stats = draftStats(rows);
+    emit(ctx, room_id, ready ? 'draft_locked' : 'draft_updated', `${team.toUpperCase()} ${ready ? 'locked' : 'updated'} ${stats.units} units (${stats.points}/${DRAFT_POINTS_CAP} pts)`, {
+      operator_id: ctx.sender,
+    });
+    maybeStartBattleFromDrafts(ctx, room_id, title, max_depth, max_tasks, deadline_ms, run_budget_micros);
   }
 );
 
@@ -1484,7 +1696,7 @@ export const issueOrder = spacetimedb.reducer(
     if (!activeGoal) throw new SenderError('no active battle');
     const node = ctx.db.battleNode.id.find(target_node_id);
     if (!node || node.goal_id !== activeGoal.id) throw new SenderError('battle node not found');
-    if (team !== 'blue' && team !== 'red') throw new SenderError('bad team');
+    requireTeamCommander(ctx, room_id, team);
 
     const ts = teamRow(ctx, activeGoal.id, team);
     if (!ts || ts.status !== 'fighting') throw new SenderError('team is not fighting');
