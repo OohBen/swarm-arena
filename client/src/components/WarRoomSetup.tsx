@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent } from 'react';
+import type { DragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { MISSIONS, MODELS, CREW_POINTS_CAP, modelById, ModelCard } from '../lib/missions';
 
 type Team = 'blue' | 'red';
 type Unit = { uid: string; model: string; tier: 'command' | 'field' };
+type PointerDrag = { uid: string; label: string; x: number; y: number; startX: number; startY: number; active: boolean };
 
 function uid() {
   return Math.random().toString(36).slice(2, 9);
@@ -61,8 +62,10 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
   const [copied, setCopied] = useState(false);
   const [draggingUnit, setDraggingUnit] = useState<string | null>(null);
   const [dragTarget, setDragTarget] = useState<'command' | 'field' | null>(null);
+  const [pointerDrag, setPointerDrag] = useState<PointerDrag | null>(null);
   const snapshot = useRef<Set<string>>(new Set());
   const hydrated = useRef<string>('');
+  const pointerDragRef = useRef<PointerDrag | null>(null);
   const me = identity?.toHexString();
 
   const room = currentRoom ?? (preRoomId != null ? rooms.find((r: any) => r.id === preRoomId) ?? null : null);
@@ -89,6 +92,7 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
   const field = units.filter((u) => u.tier === 'field');
   const crewSpec = useMemo(() => crewFromUnits(units), [units]);
   const crewSig = JSON.stringify(crewSpec);
+  const modelLabel = (u: Unit) => modelById(u.model)?.name ?? u.model.split('/').pop()?.replace(/:.*$/, '') ?? u.model;
 
   const estBurn = units.reduce((s, u) => {
     const m = modelById(u.model);
@@ -183,6 +187,66 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
     if (!canEdit) return;
     setUnits((u) => u.filter((x) => x.uid !== id));
   };
+
+  const beginPointerDrag = (u: Unit) => (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!canEdit || e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    const next = {
+      uid: u.uid,
+      label: modelLabel(u),
+      x: e.clientX,
+      y: e.clientY,
+      startX: e.clientX,
+      startY: e.clientY,
+      active: false,
+    };
+    pointerDragRef.current = next;
+    setPointerDrag(next);
+    setDraggingUnit(u.uid);
+  };
+
+  useEffect(() => {
+    const tierAt = (x: number, y: number): 'command' | 'field' | null => {
+      const hit = document.elementFromPoint(x, y) as HTMLElement | null;
+      const tier = hit?.closest?.('.wr-tier');
+      if (!tier) return null;
+      if (tier.classList.contains('command')) return 'command';
+      if (tier.classList.contains('field')) return 'field';
+      return null;
+    };
+
+    const onMove = (e: PointerEvent) => {
+      const drag = pointerDragRef.current;
+      if (!drag) return;
+      const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 5;
+      const next = { ...drag, x: e.clientX, y: e.clientY, active: drag.active || moved };
+      pointerDragRef.current = next;
+      setPointerDrag(next);
+      setDragTarget(tierAt(e.clientX, e.clientY));
+    };
+
+    const onUp = (e: PointerEvent) => {
+      const drag = pointerDragRef.current;
+      if (!drag) return;
+      const target = tierAt(e.clientX, e.clientY);
+      if (canEdit && drag.active && target) {
+        setUnits((u) => u.map((x) => (x.uid === drag.uid ? { ...x, tier: target } : x)));
+      }
+      pointerDragRef.current = null;
+      setPointerDrag(null);
+      setDraggingUnit(null);
+      setDragTarget(null);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [canEdit]);
 
   const onDrop = (tier: 'command' | 'field') => (e: DragEvent) => {
     e.preventDefault();
@@ -374,17 +438,7 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                       onRemove={() => removeUnit(u.uid)}
                       onMove={() => moveUnit(u.uid, 'field')}
                       dragging={draggingUnit === u.uid}
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('application/x-swarm-unit', u.uid);
-                        e.dataTransfer.setData('unit', u.uid);
-                        e.dataTransfer.setData('text/plain', modelById(u.model)?.name ?? u.model);
-                        setDraggingUnit(u.uid);
-                      }}
-                      onDragEnd={() => {
-                        setDraggingUnit(null);
-                        setDragTarget(null);
-                      }}
+                      onPointerDown={beginPointerDrag(u)}
                     />
                   ))}
                 </div>
@@ -410,17 +464,7 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                       onRemove={() => removeUnit(u.uid)}
                       onMove={() => moveUnit(u.uid, 'command')}
                       dragging={draggingUnit === u.uid}
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('application/x-swarm-unit', u.uid);
-                        e.dataTransfer.setData('unit', u.uid);
-                        e.dataTransfer.setData('text/plain', modelById(u.model)?.name ?? u.model);
-                        setDraggingUnit(u.uid);
-                      }}
-                      onDragEnd={() => {
-                        setDraggingUnit(null);
-                        setDragTarget(null);
-                      }}
+                      onPointerDown={beginPointerDrag(u)}
                     />
                   ))}
                 </div>
@@ -440,6 +484,11 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
         )}
 
       </div>
+      {pointerDrag?.active && (
+        <div className={`wr-drag-ghost ${myTeam ?? ''}`} style={{ left: pointerDrag.x, top: pointerDrag.y }}>
+          {pointerDrag.label}
+        </div>
+      )}
     </div>
   );
 }
@@ -497,26 +546,23 @@ function Counter({
   dragging,
   onRemove,
   onMove,
-  onDragStart,
-  onDragEnd,
+  onPointerDown,
 }: {
   u: Unit;
   locked: boolean;
   dragging: boolean;
   onRemove: () => void;
   onMove: () => void;
-  onDragStart: (e: DragEvent<HTMLDivElement>) => void;
-  onDragEnd: () => void;
+  onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
 }) {
   const m = modelById(u.model);
   const name = m?.name ?? u.model.split('/').pop()?.replace(/:.*$/, '') ?? u.model;
   return (
     <div
       className={`wr-counter ${u.tier} ${locked ? 'locked' : ''} ${dragging ? 'dragging' : ''}`}
-      draggable={!locked}
-      onDragStart={locked ? undefined : onDragStart}
-      onDragEnd={locked ? undefined : onDragEnd}
-      title={locked ? 'draft locked' : 'drag between Command and Field'}
+      draggable={false}
+      onPointerDown={locked ? undefined : onPointerDown}
+      title={locked ? 'draft locked' : 'drag between Command and Field or use the move button'}
     >
       <span className="wr-counter-glyph">{u.tier === 'command' ? '◆' : '▣'}</span>
       <span className="wr-counter-name">{name}</span>
