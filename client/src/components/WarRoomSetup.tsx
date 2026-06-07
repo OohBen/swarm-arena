@@ -59,6 +59,8 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
   const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<'idle' | 'creating'>('idle');
   const [copied, setCopied] = useState(false);
+  const [draggingUnit, setDraggingUnit] = useState<string | null>(null);
+  const [dragTarget, setDragTarget] = useState<'command' | 'field' | null>(null);
   const snapshot = useRef<Set<string>>(new Set());
   const hydrated = useRef<string>('');
   const me = identity?.toHexString();
@@ -184,15 +186,25 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
 
   const onDrop = (tier: 'command' | 'field') => (e: DragEvent) => {
     e.preventDefault();
-    const unitId = e.dataTransfer.getData('unit');
+    e.stopPropagation();
+    setDragTarget(null);
+    setDraggingUnit(null);
+    const unitId = e.dataTransfer.getData('application/x-swarm-unit') || e.dataTransfer.getData('unit');
     if (unitId) {
       moveUnit(unitId, tier);
       return;
     }
-    const model = e.dataTransfer.getData('model');
+    const model = e.dataTransfer.getData('application/x-swarm-model') || e.dataTransfer.getData('model');
     if (model) addUnit(model, tier);
   };
-  const allow = (e: DragEvent) => e.preventDefault();
+  const allow = (e: DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+  const leaveDrop = (tier: 'command' | 'field') => (e: DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    if (dragTarget === tier) setDragTarget(null);
+  };
 
   const setupRooms = rooms.filter((r: any) => r.status === 'setup');
   const runningRooms = rooms.filter((r: any) => goals.some((g: any) => g.roomId === r.id && g.status === 'active'));
@@ -254,6 +266,38 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
           />
         </div>
 
+        {!room && (setupRooms.length > 0 || runningRooms.length > 0) && (
+          <div className="wr-lobby-strip">
+            {setupRooms.length > 0 && (
+              <div className="wr-join">
+                <span className="wr-label">Open lobbies</span>
+                {setupRooms.map((r: any) => {
+                  const ops = operators.filter((o: any) => o.roomId === r.id);
+                  const hasBlue = ops.some((o: any) => o.team === 'blue');
+                  const hasRed = ops.some((o: any) => o.team === 'red');
+                  return (
+                    <span key={String(r.id)} className="wr-roomgroup">
+                      <button className="wr-chip" disabled={hasBlue} onClick={() => joinSide(r.id, 'blue')}>{r.name} #{String(r.id)} Blue</button>
+                      <button className="wr-chip red" disabled={hasRed} onClick={() => joinSide(r.id, 'red')}>Red</button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {runningRooms.length > 0 && (
+              <div className="wr-join">
+                <span className="wr-label">Live battles</span>
+                {runningRooms.map((r: any) => (
+                  <button key={String(r.id)} className="wr-chip" onClick={() => joinSide(r.id, 'spectator')}>
+                    Watch #{String(r.id)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="wr-label">02 · Operation</div>
         <div className="wr-missions">
           {MISSIONS.map((m) => (
@@ -312,7 +356,13 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                 </span>
               </div>
 
-              <div className={`wr-tier command ${command.length === 0 ? 'empty' : ''}`} onDrop={onDrop('command')} onDragOver={allow}>
+              <div
+                className={`wr-tier command ${command.length === 0 ? 'empty' : ''} ${dragTarget === 'command' ? 'drop-hot' : ''}`}
+                onDrop={onDrop('command')}
+                onDragEnter={() => setDragTarget('command')}
+                onDragLeave={leaveDrop('command')}
+                onDragOver={allow}
+              >
                 <div className="wr-tier-tag">◆ COMMAND</div>
                 <div className="wr-counters">
                   {command.length === 0 && <div className="wr-drop">drop one Lead here</div>}
@@ -323,7 +373,18 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                       locked={!canEdit}
                       onRemove={() => removeUnit(u.uid)}
                       onMove={() => moveUnit(u.uid, 'field')}
-                      onDragStart={(e) => e.dataTransfer.setData('unit', u.uid)}
+                      dragging={draggingUnit === u.uid}
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('application/x-swarm-unit', u.uid);
+                        e.dataTransfer.setData('unit', u.uid);
+                        e.dataTransfer.setData('text/plain', modelById(u.model)?.name ?? u.model);
+                        setDraggingUnit(u.uid);
+                      }}
+                      onDragEnd={() => {
+                        setDraggingUnit(null);
+                        setDragTarget(null);
+                      }}
                     />
                   ))}
                 </div>
@@ -331,7 +392,13 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
 
               <div className="wr-spine"><span>{locked ? 'draft locked' : 'live draft syncs to spacetime'}</span></div>
 
-              <div className={`wr-tier field ${field.length === 0 ? 'empty' : ''}`} onDrop={onDrop('field')} onDragOver={allow}>
+              <div
+                className={`wr-tier field ${field.length === 0 ? 'empty' : ''} ${dragTarget === 'field' ? 'drop-hot' : ''}`}
+                onDrop={onDrop('field')}
+                onDragEnter={() => setDragTarget('field')}
+                onDragLeave={leaveDrop('field')}
+                onDragOver={allow}
+              >
                 <div className="wr-tier-tag">▣ FIELD</div>
                 <div className="wr-counters">
                   {field.length === 0 && <div className="wr-drop">drop Workers here</div>}
@@ -342,7 +409,18 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                       locked={!canEdit}
                       onRemove={() => removeUnit(u.uid)}
                       onMove={() => moveUnit(u.uid, 'command')}
-                      onDragStart={(e) => e.dataTransfer.setData('unit', u.uid)}
+                      dragging={draggingUnit === u.uid}
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('application/x-swarm-unit', u.uid);
+                        e.dataTransfer.setData('unit', u.uid);
+                        e.dataTransfer.setData('text/plain', modelById(u.model)?.name ?? u.model);
+                        setDraggingUnit(u.uid);
+                      }}
+                      onDragEnd={() => {
+                        setDraggingUnit(null);
+                        setDragTarget(null);
+                      }}
                     />
                   ))}
                 </div>
@@ -361,33 +439,6 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
           </div>
         )}
 
-        {!room && setupRooms.length > 0 && (
-          <div className="wr-join">
-            <span className="wr-label">Open lobbies</span>
-            {setupRooms.map((r: any) => {
-              const ops = operators.filter((o: any) => o.roomId === r.id);
-              const hasBlue = ops.some((o: any) => o.team === 'blue');
-              const hasRed = ops.some((o: any) => o.team === 'red');
-              return (
-                <span key={String(r.id)} className="wr-roomgroup">
-                  <button className="wr-chip" disabled={hasBlue} onClick={() => joinSide(r.id, 'blue')}>{r.name} #{String(r.id)} Blue</button>
-                  <button className="wr-chip red" disabled={hasRed} onClick={() => joinSide(r.id, 'red')}>Red</button>
-                </span>
-              );
-            })}
-          </div>
-        )}
-
-        {!room && runningRooms.length > 0 && (
-          <div className="wr-join">
-            <span className="wr-label">Live battles</span>
-            {runningRooms.map((r: any) => (
-              <button key={String(r.id)} className="wr-chip" onClick={() => joinSide(r.id, 'spectator')}>
-                Watch #{String(r.id)}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -415,7 +466,12 @@ function MarketCard({ m, disabled, onAdd }: { m: ModelCard; disabled: boolean; o
     <div
       className={`wr-unit-card ${!m.beatsDeadline ? 'risky' : ''} ${disabled ? 'disabled' : ''}`}
       draggable={!disabled}
-      onDragStart={(e) => e.dataTransfer.setData('model', m.id)}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('application/x-swarm-model', m.id);
+        e.dataTransfer.setData('model', m.id);
+        e.dataTransfer.setData('text/plain', m.name);
+      }}
     >
       <div className="wr-uc-head">
         <span className="wr-uc-name">{m.name}</span>
@@ -438,23 +494,28 @@ function MarketCard({ m, disabled, onAdd }: { m: ModelCard; disabled: boolean; o
 function Counter({
   u,
   locked,
+  dragging,
   onRemove,
   onMove,
   onDragStart,
+  onDragEnd,
 }: {
   u: Unit;
   locked: boolean;
+  dragging: boolean;
   onRemove: () => void;
   onMove: () => void;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
 }) {
   const m = modelById(u.model);
   const name = m?.name ?? u.model.split('/').pop()?.replace(/:.*$/, '') ?? u.model;
   return (
     <div
-      className={`wr-counter ${u.tier} ${locked ? 'locked' : ''}`}
+      className={`wr-counter ${u.tier} ${locked ? 'locked' : ''} ${dragging ? 'dragging' : ''}`}
       draggable={!locked}
       onDragStart={locked ? undefined : onDragStart}
+      onDragEnd={locked ? undefined : onDragEnd}
       title={locked ? 'draft locked' : 'drag between Command and Field'}
     >
       <span className="wr-counter-glyph">{u.tier === 'command' ? '◆' : '▣'}</span>
