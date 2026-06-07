@@ -721,3 +721,52 @@ body {
 .wb-crisis-btn span { font-family: 'IBM Plex Mono'; font-size: 9.5px; color: #6b6553; }
 .wb-disp-k.k-crisis { color: #fff; background: #a8332e; padding: 0 5px; }
 .wb-disp-k.k-crisis_resolved { color: #2e5a8c; }
+
+/* ============================ AFTER-ACTION REPORT ======================= */
+.ar {
+  position: fixed; inset: 0; z-index: 45; overflow: auto;
+  font-family: 'IBM Plex Sans', sans-serif; color: #1f1b14;
+  background:
+    radial-gradient(1100px 700px at 70% -10%, rgba(46,90,140,0.06), transparent 60%),
+    #ded7c2;
+  display: flex; justify-content: center; padding: 34px 26px 60px;
+}
+.ar * { box-sizing: border-box; }
+.ar-sheet {
+  width: min(1040px, 100%); background:
+    linear-gradient(rgba(31,27,20,0.045) 1px, transparent 1px) 0 0 / 100% 26px,
+    linear-gradient(90deg, rgba(31,27,20,0.045) 1px, transparent 1px) 0 0 / 26px 100%, #e8e2d0;
+  border: 1.5px solid #1f1b14; box-shadow: 0 18px 50px rgba(0,0,0,0.28); padding: 28px 32px;
+}
+.ar-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1.5px solid #1f1b14; padding-bottom: 16px; }
+.ar-stamp { display: inline-block; font-family: 'Oswald'; font-size: 11px; letter-spacing: 0.2em; padding: 3px 10px; transform: rotate(-2deg); margin-bottom: 9px; border: 1.5px solid; }
+.ar-stamp.win { color: #2e5a8c; border-color: #2e5a8c; }
+.ar-stamp.fail { color: #a8332e; border-color: #a8332e; }
+.ar-h1 { font-family: 'Saira Condensed'; font-weight: 800; font-size: 40px; line-height: 0.9; margin: 0; }
+.ar-op { font-family: 'IBM Plex Mono'; font-size: 11px; color: #6b6553; margin-top: 8px; max-width: 560px; line-height: 1.5; }
+.ar-score { text-align: right; flex-shrink: 0; }
+.ar-k { font-family: 'IBM Plex Mono'; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #6b6553; }
+.ar-score-v { font-family: 'Saira Condensed'; font-weight: 800; font-size: 52px; line-height: 0.9; color: #1f1b14; }
+.ar-back { margin-top: 10px; cursor: pointer; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; padding: 7px 14px; background: transparent; border: 1.5px solid #1f1b14; color: #1f1b14; }
+.ar-back:hover { background: #1f1b14; color: #f4efe0; }
+
+.ar-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: #1f1b14; border: 1.5px solid #1f1b14; margin: 18px 0; }
+.ar-stat { background: #efe9d8; padding: 12px 14px; }
+.ar-stat-v { font-family: 'Saira Condensed'; font-weight: 700; font-size: 24px; line-height: 1; margin-top: 6px; }
+.ar-stat-v.good { color: #2e5a8c; } .ar-stat-v.warn { color: #b3631a; } .ar-stat-v.blue { color: #2e5a8c; }
+
+.ar-cols { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+.ar-panel { border: 1.5px solid #1f1b14; background: #e8e2d0; }
+.ar-panel-h { font-family: 'Oswald'; font-weight: 600; font-size: 10px; letter-spacing: 0.16em; padding: 7px 13px; background: #1f1b14; color: #f4efe0; }
+.ar-table { width: 100%; border-collapse: collapse; font-family: 'IBM Plex Mono'; font-size: 12px; }
+.ar-table th { text-align: left; padding: 9px 13px; font-family: 'Oswald'; font-weight: 600; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6553; border-bottom: 1.5px solid rgba(31,27,20,0.3); }
+.ar-table td { padding: 10px 13px; border-bottom: 1px solid rgba(31,27,20,0.12); color: #4a4536; }
+.ar-table tbody tr:hover { background: rgba(46,90,140,0.05); }
+.ar-unit { font-family: 'Saira Condensed'; font-weight: 700; font-size: 15px; color: #1f1b14 !important; }
+.ar-table .good { color: #2e5a8c; } .ar-table .warn { color: #b3631a; } .ar-table .blue { color: #2e5a8c; }
+.ar-empty { font-style: italic; color: #6b6553; padding: 16px !important; }
+.ar-coord-b { padding: 6px 13px 10px; }
+.ar-line { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(31,27,20,0.1); font-size: 12px; color: #4a4536; }
+.ar-line b { font-family: 'IBM Plex Mono'; color: #1f1b14; }
+.ar-line b.blue { color: #2e5a8c; } .ar-line b.warn { color: #b3631a; } .ar-line b.bad { color: #a8332e; } .ar-line b.human { color: #7a3a8a; }
+.ar-div { height: 1.5px; background: rgba(31,27,20,0.3); margin: 6px 0; }

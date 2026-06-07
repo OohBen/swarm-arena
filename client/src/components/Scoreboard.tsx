@@ -13,7 +13,6 @@ export function Scoreboard({ goal, score, tasks, events, onBack }: any) {
   const completion = total ? Math.round((done.length / total) * 100) : 0;
   const deadlineMs = num(goal?.deadlineMs) || 2000;
 
-  // ---- per-model split (real latency/cost from task rows) ----
   const models: Record<string, any> = {};
   for (const t of tasks) {
     const m = t.assignedModel;
@@ -23,10 +22,7 @@ export function Scoreboard({ goal, score, tasks, events, onBack }: any) {
     if (t.status === 'done') {
       e.done++;
       const l = num(t.latencyMs);
-      if (l > 0) {
-        e.lat.push(l);
-        if (l <= deadlineMs) e.under++;
-      }
+      if (l > 0) { e.lat.push(l); if (l <= deadlineMs) e.under++; }
       e.cost += num(t.costMicros) / 1_000_000;
     }
   }
@@ -49,82 +45,74 @@ export function Scoreboard({ goal, score, tasks, events, onBack }: any) {
   const onTime = valid + late ? Math.round((valid / (valid + late)) * 100) : 100;
   const validRate = valid + invalid ? Math.round((valid / (valid + invalid)) * 100) : 100;
   const cost = num(score?.estimatedCostMicros) / 1_000_000;
-
   const times = events.map((e: any) => microsToMs(e.createdAt)).filter((x: number) => x > 0);
   const durationS = times.length ? Math.round((Math.max(...times) - Math.min(...times)) / 1000) : 0;
 
   const complete = goal?.status === 'complete';
+  const stopped = goal?.status === 'stopped';
+  const verdict = complete ? 'MISSION ACCOMPLISHED' : stopped ? 'SUPPLIES EXHAUSTED' : 'OPERATION ENDED';
 
   return (
-    <div className="scoreboard">
-      <div className="sb-inner">
-        <div className="sb-head">
-          <div>
-            <div className="micro">Expedition Report</div>
-            <div className={`sb-status ${complete ? 'win' : ''}`}>
-              {complete ? 'EXPEDITION COMPLETE' : (goal?.status ?? 'in progress').toUpperCase()}
-            </div>
-            <div className="sb-mission">{goal?.title}</div>
+    <div className="ar">
+      <div className="ar-sheet">
+        <div className="ar-head">
+          <div className="ar-head-l">
+            <span className={`ar-stamp ${complete ? 'win' : 'fail'}`}>{verdict}</span>
+            <h1 className="ar-h1">AFTER-ACTION REPORT</h1>
+            <div className="ar-op">{goal?.title}</div>
           </div>
-          <div className="sb-score">
-            <div className="micro">Final Score</div>
-            <div className="sb-score-v">{num(score?.points).toLocaleString()}</div>
+          <div className="ar-score">
+            <div className="ar-k">Final Score</div>
+            <div className="ar-score-v">{num(score?.points).toLocaleString()}</div>
+            <button className="ar-back" onClick={onBack}>◂ Back to Operation</button>
           </div>
-          <button className="btn ghost" style={{ width: 160, alignSelf: 'flex-start' }} onClick={onBack}>
-            ◂ Back to Live
-          </button>
         </div>
 
-        <div className="sb-stats">
-          <Big label="Completion" v={`${completion}%`} tone={completion === 100 ? 'good' : ''} />
-          <Big label="On-Time Rate" v={`${onTime}%`} tone={onTime >= 80 ? 'good' : 'warn'} />
-          <Big label="Valid Output" v={`${validRate}%`} tone={validRate >= 90 ? 'good' : 'warn'} />
-          <Big label="Tasks Done" v={done.length} />
-          <Big label="Run Time" v={`${durationS}s`} />
-          <Big label="Total Cost" v={`$${cost.toFixed(4)}`} tone="cy" />
+        <div className="ar-stats">
+          <Stat k="Completion" v={`${completion}%`} tone={completion === 100 ? 'good' : ''} />
+          <Stat k="On-Time" v={`${onTime}%`} tone={onTime >= 80 ? 'good' : 'warn'} />
+          <Stat k="Valid Output" v={`${validRate}%`} tone={validRate >= 90 ? 'good' : 'warn'} />
+          <Stat k="Objectives" v={done.length} />
+          <Stat k="Run Time" v={`${durationS}s`} />
+          <Stat k="Supplies Spent" v={`$${cost.toFixed(4)}`} tone="blue" />
         </div>
 
-        <div className="sb-cols">
-          <div className="panel" style={{ flex: 1 }}>
-            <div className="panel-h"><span className="micro">Crew Performance · real latency &amp; cost</span></div>
-            <div className="panel-b" style={{ padding: 0 }}>
-              <table className="sb-table">
-                <thead>
-                  <tr>
-                    <th>Model</th><th>Done</th><th>Avg</th><th>p95</th><th>&lt;{(deadlineMs/1000).toFixed(1)}s</th><th>Cost</th><th>Pts/¢</th>
+        <div className="ar-cols">
+          <div className="ar-panel">
+            <div className="ar-panel-h">CREW PERFORMANCE · real latency &amp; cost</div>
+            <table className="ar-table">
+              <thead>
+                <tr><th>Unit</th><th>Done</th><th>Avg</th><th>p95</th><th>&lt;{(deadlineMs / 1000).toFixed(1)}s</th><th>Cost</th><th>Value</th></tr>
+              </thead>
+              <tbody>
+                {modelRows.length === 0 && <tr><td colSpan={7} className="ar-empty">No engagement data.</td></tr>}
+                {modelRows.map((r: any) => (
+                  <tr key={r.model}>
+                    <td className="ar-unit">{r.model}</td>
+                    <td>{r.done}</td>
+                    <td>{r.avg}ms</td>
+                    <td>{r.p95}ms</td>
+                    <td className={r.under >= 80 ? 'good' : 'warn'}>{r.under}%</td>
+                    <td>${r.cost.toFixed(4)}</td>
+                    <td className="blue">{r.value}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {modelRows.length === 0 && (
-                    <tr><td colSpan={7} style={{ color: 'var(--ink-faint)', fontStyle: 'italic', padding: 16 }}>No model data yet.</td></tr>
-                  )}
-                  {modelRows.map((r: any) => (
-                    <tr key={r.model}>
-                      <td className="hud" style={{ color: 'var(--ink)' }}>{r.model}</td>
-                      <td>{r.done}</td>
-                      <td>{r.avg}ms</td>
-                      <td>{r.p95}ms</td>
-                      <td className={r.under >= 80 ? 'good' : 'warn'}>{r.under}%</td>
-                      <td>${r.cost.toFixed(4)}</td>
-                      <td className="cy">{r.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          <div className="panel" style={{ width: 320 }}>
-            <div className="panel-h"><span className="micro">Coordination · SpacetimeDB</span></div>
-            <div className="panel-b">
-              <Line label="Objectives claimed (atomic)" v={tally('task_claimed')} tone="cy" />
-              <Line label="Sub-objectives spawned" v={tally('children_spawned')} />
-              <Line label="Crew recovered (stale lease)" v={tally('stale_recovery')} tone="warn" />
-              <Line label="Commander saves" v={tally('human_override')} tone="human" />
-              <div className="sb-div" />
-              <Line label="Deadline misses" v={tally('deadline_missed')} tone="bad" />
-              <Line label="Invalid results" v={invalid} tone="bad" />
-              <Line label="Supply caps hit" v={tally('budget_hit')} tone="warn" />
+          <div className="ar-panel ar-coord">
+            <div className="ar-panel-h">COORDINATION · SPACETIMEDB</div>
+            <div className="ar-coord-b">
+              <Line k="Objectives claimed (atomic)" v={tally('task_claimed')} tone="blue" />
+              <Line k="Sub-objectives spawned" v={tally('children_spawned')} />
+              <Line k="Crew recovered (stale lease)" v={tally('stale_recovery')} tone="warn" />
+              <Line k="Commander saves" v={tally('human_override')} tone="human" />
+              <Line k="Crises weathered" v={tally('crisis_resolved')} tone="warn" />
+              <div className="ar-div" />
+              <Line k="Deadline misses" v={tally('deadline_missed')} tone="bad" />
+              <Line k="Invalid results" v={invalid} tone="bad" />
+              <Line k="Objectives lost" v={tally('task_blocked')} tone="bad" />
             </div>
           </div>
         </div>
@@ -133,20 +121,9 @@ export function Scoreboard({ goal, score, tasks, events, onBack }: any) {
   );
 }
 
-function Big({ label, v, tone = '' }: any) {
-  return (
-    <div className="sb-big">
-      <div className="micro">{label}</div>
-      <div className={`sb-big-v ${tone}`}>{v}</div>
-    </div>
-  );
+function Stat({ k, v, tone = '' }: any) {
+  return <div className="ar-stat"><div className="ar-k">{k}</div><div className={`ar-stat-v ${tone}`}>{v}</div></div>;
 }
-
-function Line({ label, v, tone = '' }: any) {
-  return (
-    <div className="sb-line">
-      <span>{label}</span>
-      <span className={`mono ${tone}`} style={{ fontWeight: 600 }}>{v}</span>
-    </div>
-  );
+function Line({ k, v, tone = '' }: any) {
+  return <div className="ar-line"><span>{k}</span><b className={tone}>{v}</b></div>;
 }
