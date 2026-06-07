@@ -5,7 +5,7 @@ import { AgentRoster } from './components/AgentRoster';
 import { EventConsole } from './components/EventConsole';
 import { TaskGraph } from './components/TaskGraph';
 import { TaskInspector } from './components/TaskInspector';
-import { MissionSetup } from './components/MissionSetup';
+import { WarRoomSetup } from './components/WarRoomSetup';
 import { Scoreboard } from './components/Scoreboard';
 
 export default function App() {
@@ -49,7 +49,7 @@ export default function App() {
 
   if (roomId == null || !activeGoal) {
     return (
-      <MissionSetup
+      <WarRoomSetup
         conn={conn}
         identity={identity}
         isActive={isActive}

@@ -68,15 +68,17 @@ export interface ModelCard {
   pts: number; // crew-points cost
   p50: number; // measured median latency, ms
   beatsDeadline: boolean; // reliably under the 2s window?
+  priceIn: number; // $ per 1M input tokens (real OpenRouter pricing)
+  priceOut: number; // $ per 1M output tokens
 }
 
 export const MODELS: ModelCard[] = [
-  { id: 'openai/gpt-oss-120b:nitro', name: 'Scout', tagline: 'Fast, cheap, beats the deadline every time.', speed: 5, quality: 4, cost: 1, pts: 2, p50: 510, beatsDeadline: true },
-  { id: 'z-ai/glm-4.7:nitro', name: 'Engineer', tagline: 'High-quality work, still under the deadline.', speed: 4, quality: 5, cost: 2, pts: 4, p50: 705, beatsDeadline: true },
-  { id: 'inception/mercury-2:nitro', name: 'Runner', tagline: 'Reliable fast fallback, mid cost.', speed: 4, quality: 4, cost: 3, pts: 3, p50: 1089, beatsDeadline: true },
-  { id: 'x-ai/grok-4.3:nitro', name: 'Oracle', tagline: 'Genius-tier — but slow and pricey. Misses the 2s window.', speed: 2, quality: 5, cost: 5, pts: 6, p50: 3291, beatsDeadline: false },
-  { id: 'google/gemini-3.1-flash-lite:nitro', name: 'Surveyor', tagline: 'Capable but inconsistent latency; often late.', speed: 2, quality: 4, cost: 2, pts: 3, p50: 6287, beatsDeadline: false },
-  { id: 'deepseek/deepseek-v4-flash:nitro', name: 'Analyst', tagline: 'Cheap and thorough, but very slow.', speed: 1, quality: 4, cost: 2, pts: 2, p50: 8316, beatsDeadline: false },
+  { id: 'openai/gpt-oss-120b:nitro', name: 'Scout', tagline: 'Fast, cheap, beats the deadline every time.', speed: 5, quality: 4, cost: 1, pts: 2, p50: 510, beatsDeadline: true, priceIn: 0.10, priceOut: 0.50 },
+  { id: 'z-ai/glm-4.7:nitro', name: 'Engineer', tagline: 'High-quality work, still under the deadline.', speed: 4, quality: 5, cost: 2, pts: 4, p50: 705, beatsDeadline: true, priceIn: 0.40, priceOut: 1.60 },
+  { id: 'inception/mercury-2:nitro', name: 'Runner', tagline: 'Reliable fast fallback, mid cost.', speed: 4, quality: 4, cost: 3, pts: 3, p50: 1089, beatsDeadline: true, priceIn: 0.25, priceOut: 1.00 },
+  { id: 'x-ai/grok-4.3:nitro', name: 'Oracle', tagline: 'Genius-tier — but slow and pricey. Misses the 2s window.', speed: 2, quality: 5, cost: 5, pts: 6, p50: 3291, beatsDeadline: false, priceIn: 3.00, priceOut: 15.00 },
+  { id: 'google/gemini-3.1-flash-lite:nitro', name: 'Surveyor', tagline: 'Capable but inconsistent latency; often late.', speed: 2, quality: 4, cost: 2, pts: 3, p50: 6287, beatsDeadline: false, priceIn: 0.10, priceOut: 0.40 },
+  { id: 'deepseek/deepseek-v4-flash:nitro', name: 'Analyst', tagline: 'Cheap and thorough, but very slow.', speed: 1, quality: 4, cost: 2, pts: 2, p50: 8316, beatsDeadline: false, priceIn: 0.07, priceOut: 0.28 },
 ];
 
 export const CREW_POINTS_CAP = 20;
