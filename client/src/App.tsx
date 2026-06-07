@@ -6,7 +6,7 @@ import { Scoreboard } from './components/Scoreboard';
 
 export default function App() {
   const swarm = useSwarm();
-  const { conn, identity, isActive, subscribed, goals, tasks, agents, events, scores, operators, crises } = swarm;
+  const { conn, identity, isActive, subscribed, goals, tasks, agents, events, scores, operators, crises, teamStates, battleNodes, battleOrders } = swarm;
 
   const [roomId, setRoomId] = useState<bigint | null>(null);
   const [selectedId, setSelectedId] = useState<bigint | null>(null);
@@ -64,6 +64,9 @@ export default function App() {
   const roomAgents = agents.filter((a: any) => a.roomId === roomId);
   const roomEvents = events.filter((e: any) => e.roomId === roomId);
   const roomOps = operators.filter((o: any) => o.roomId === roomId);
+  const roomTeamStates = teamStates.filter((s: any) => s.roomId === roomId && s.goalId === activeGoal.id);
+  const roomBattleNodes = battleNodes.filter((n: any) => n.roomId === roomId && n.goalId === activeGoal.id);
+  const roomBattleOrders = battleOrders.filter((o: any) => o.roomId === roomId && o.goalId === activeGoal.id);
   const score = scores.find((s: any) => s.goalId === activeGoal.id) ?? null;
   const selectedTask = selectedId != null ? roomTasks.find((t: any) => t.id === selectedId) ?? null : null;
 
@@ -75,6 +78,8 @@ export default function App() {
         goal={activeGoal}
         score={score}
         tasks={roomTasks}
+        teamStates={roomTeamStates}
+        battleNodes={roomBattleNodes}
         events={roomEvents}
         onBack={() => setView('live')}
       />
@@ -87,6 +92,9 @@ export default function App() {
       score={score}
       tasks={roomTasks}
       agents={roomAgents}
+      teamStates={roomTeamStates}
+      battleNodes={roomBattleNodes}
+      battleOrders={roomBattleOrders}
       events={roomEvents}
       ops={roomOps}
       crises={crises.filter((c: any) => c.roomId === roomId && c.status === 'active')}

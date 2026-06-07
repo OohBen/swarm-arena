@@ -7,23 +7,24 @@
 
 ## 0. TL;DR
 
-**Swarm Arena** is a real, live, AI-powered strategy game built on **SpacetimeDB** for the SpacetimeDB Launchpad hackathon (NYC Tech Week). It is **not** a mockup — real AI agents make real OpenRouter LLM calls, coordinate through a real SpacetimeDB cloud database, and it's deployed at a public HTTPS URL.
+**Swarm Arena** is a real, live, AI-powered strategy game built on **SpacetimeDB** for the SpacetimeDB Launchpad hackathon (NYC Tech Week). It is **not** a mockup — real AI agents make real OpenRouter LLM calls and coordinate through SpacetimeDB reducers.
 
-- **Live:** https://swarm.benautomates.com (single-player, fully working, war-room aesthetic).
-- **The whole single-player loop works:** draft a crew of real models → watch the swarm decompose & execute a mission on a paper "war-room" map → supplies/budget burn down → crisis cards force decisions → after-action report.
-- **⚠️ THE BIG OPEN QUESTION (most important section — read §7):** the user has concluded the game "makes no sense as a 1v1 race or single-player — it only works if it's a fight/war." We were mid-pivot to a **two-swarm fight over a shared battle-map** when this handoff was requested. **Do not build more features until you align with the user on the fight model.**
+- **Live:** https://swarm.benautomates.com is still the previously deployed cloud app. **Do not assume it has the new battle schema.**
+- **Local battle mode is implemented and verified:** Blue drafts a fleet, Red mirrors it, both AI swarms fight over an 11-node map, humans spend command tokens to issue orders, and after-action reports show territory/HQ/combat stats.
+- **Cloud publish is intentionally not done:** the new schema requires `--delete-data=always` on `swarm-arena`; get explicit user approval before wiping/publishing production.
+- **✅ CONFIRMED PIVOT:** mixed territory-control + HQ-capture. Humans are commanders; the actual combat is mainly **AI swarm vs AI swarm** on one shared battle map. Canonical spec: `docs/battle-mode.md`.
 
 ---
 
-## 1. What it is (current single-player game)
+## 1. What it is now
 
-A war-room strategy game. The player ("Commander") is given a mission (e.g. *Colonize Mars*), drafts a hierarchy of AI agents, and commands them as they complete the mission under time + supply pressure, responding to crises.
+A war-room strategy game. The player ("Commander") drafts a Blue fleet from real OpenRouter models. SpacetimeDB seeds a mirrored Red fleet and an 11-node battle map. Both swarms claim combat tasks atomically, run strict structured-output LLM calls, and post results that move pressure, capture nodes, damage HQs, and spend supply.
 
 **Flow:** Build table → Run board → After-Action report. All three are **paper/ink "war-room" aesthetic** (this matters — see §6).
 
-- **Build (`client/src/components/WarRoomSetup.tsx`):** pick a mission; draft agents from a roster of **real OpenRouter models** showing **real $/M-token pricing** (`MODELS` in `client/src/lib/missions.ts`); drag units onto **COMMAND** (role=lead) / **FIELD** (role=worker) tiers; a **crew-points cap** (`CREW_POINTS_CAP=20`) makes drafting a tradeoff; custom model id supported.
-- **Run (`client/src/components/WarRoomBoard.tsx`):** the crew claims role-tagged objectives off a live objective tree; **supply/budget clock** burns; **crisis cards** (`CrisisAlert`) demand a response; commander **orders** (pause/redirect/reassign/merge/cancel) via `human_override`.
-- **After-Action (`client/src/components/Scoreboard.tsx`):** paper report with real per-unit latency/cost + a SpacetimeDB coordination tally.
+- **Build (`client/src/components/WarRoomSetup.tsx`):** pick a battle scenario; draft agents from a roster of **real OpenRouter models** showing **real $/M-token pricing** (`MODELS` in `client/src/lib/missions.ts`); drag units onto **COMMAND** (role=lead) / **FIELD** (role=worker); `CREW_POINTS_CAP=14`; custom model id supported.
+- **Run (`client/src/components/WarRoomBoard.tsx`):** center battle map, Blue/Red HQ integrity, territory score, command tokens, active orders, crew list, and live SpacetimeDB dispatch log. Humans select a node and issue Assault/Defend/Reinforce/Sabotage/Scout through `issue_order`.
+- **After-Action (`client/src/components/Scoreboard.tsx`):** paper report with winner, territory, HQ integrity, combat actions, real per-unit latency/cost, and SpacetimeDB coordination tally.
 
 ---
 
@@ -39,19 +40,20 @@ A war-room strategy game. The player ("Commander") is given a mission (e.g. *Col
 | **Planning docs** | `docs/`, `PLAN.md` | Original (pre-pivot) vision; partly stale now. |
 
 ### Module schema (tables)
-`room`, `operator`, `goal`, `task`, `agent`, `event`, `score`, `crew_slot`, `crisis`, `reaper_timer` (scheduled), `crisis_timer` (scheduled).
+`room`, `operator`, `goal`, `task`, `agent`, `event`, `score`, `crew_slot`, `team_state`, `battle_node`, `battle_order`, `crisis`, `reaper_timer`, `crisis_timer`, `battle_timer`.
 
-Key columns: `task.required_role` ('lead'|'worker'|'any'), `task.latency_ms`/`cost_micros`, `agent.role`, `goal.run_budget_micros` (supply budget; 0=unlimited), `crew_slot` (model+role+count = what the runner deploys).
+Key columns: `task.required_role`, `task.team`, `task.target_node_id`, `task.action_type`, `task.priority`, `task.latency_ms`/`cost_micros`, `agent.team`, `agent.role`, `goal.run_budget_micros`, `crew_slot.team`, `battle_node.owner`/`fortification`/`blue_pressure`/`red_pressure`/`hq_integrity`, `team_state.command_tokens`/`hq_integrity`.
 
 ### Reducers
-`create_room`, `join_room`, `submit_goal(room, title, max_depth, max_tasks, deadline_ms, run_budget_micros, crew[])`, `register_agent(room, name, model, role)`, `claim_task(room, agent)` (atomic, role-preferring + budget/goal-active guarded), `post_result`, `human_override`, `heartbeat_agent`, `heartbeat_operator`, `reap` (scheduled stale-lease recovery), `crisis_tick` (scheduled crisis director), `resolve_crisis(crisis_id, choice)`.
+`create_room`, `join_room`, `submit_goal(room, title, max_depth, max_tasks, deadline_ms, run_budget_micros, crew[])`, `register_agent(room, name, model, role, team)`, `claim_task(room, agent)` (atomic, team/role/priority-scoped), `post_result`, `issue_order`, `human_override`, `heartbeat_agent`, `heartbeat_operator`, `battle_tick`, `reap`, `crisis_tick`, `resolve_crisis`.
 
 ### How it fits together
-1. Client `submit_goal` writes the goal + root task + **`crew_slot` rows** (the drafted crew).
-2. The deployed **supervisor** (`runner --auto`) watches the cloud DB, sees an active goal with pending work, reads its `crew_slot` rows, and spawns exactly that crew (each agent its own connection) with roles.
-3. Agents loop: `claim_task` (atomic — role-preferring) → real OpenRouter call (strict structured output) → `post_result` (mutates the task tree, spawns children with role by depth tier: depths 0..`LEAD_TIERS`=1 → lead, deeper → worker).
-4. `crisis_tick` (every 9s) injects crises; client renders the card; `resolve_crisis` applies the chosen effect (supply cost / score / blocked objectives); expiry = worse penalty.
-5. Budget: when `score.estimated_cost_micros >= goal.run_budget_micros`, `post_result` stops the goal (`status='stopped'`) and `claim_task` stops handing out work.
+1. Client `submit_goal` writes the goal, battle map, Blue/Red team states, opening scout/assault tasks, and mirrored Blue/Red `crew_slot` rows.
+2. The runner/supervisor reads `crew_slot` rows and spawns exactly those agents, one persistent SpacetimeDB connection each.
+3. Agents loop: `claim_task` (atomic, team-scoped) → real OpenRouter call (strict structured output) → `post_result` applies combat through reducers. Battle tasks do **not** spawn LLM child tasks.
+4. Humans issue `issue_order` against a selected node. Orders spend Blue command tokens, immediately nudge the selected node, enqueue/raise a high-priority task, and write visible `battle_order`/`order_effect`/`human_order` rows.
+5. `battle_tick` regenerates command tokens, expires old orders, ensures each team has a small number of active combat opportunities, and checks supply budget.
+6. `crisis_tick` still exists for legacy mode, but battle-mode goals are skipped so random crisis cards do not block combat tasks.
 
 ---
 
@@ -77,10 +79,11 @@ Monitor: `GET https://app.coolify.io/api/v1/deployments/<deployment-uuid>` → `
 ## 4. Local dev
 
 - **Client:** `cd client && npm run dev` (Vite, port 5173). Connects to cloud `swarm-arena` by default (`client/src/config.ts`).
+- **Local battle client:** `cd client && VITE_SPACETIMEDB_URI=ws://127.0.0.1:3000 VITE_MODULE_NAME=swarm-arena-battle-test npm run dev -- --host 127.0.0.1`
 - **Runner (point at a room):** `cd runner && SWARM_ROOM=<id> npx tsx src/index.ts --agents "openai/gpt-oss-120b:nitro,z-ai/glm-4.7:nitro" [--mission "..."]`
 - **Runner (auto/supervisor):** `SWARM_AUTO=1 SWARM_MAX_ROOMS=2 SWARM_PACE_MS=4500 npx tsx src/index.ts --auto`
-- **Module:** `cd server && spacetime build`, then `spacetime publish swarm-arena --server maincloud --yes` (add `--delete-data=always` for schema changes — **wipes the cloud DB**). Then regenerate bindings (both dirs) + redeploy.
-- **Create an op by CLI** (reliable, vs the flaky UI button): from `/tmp`, `spacetime call swarm-arena create_room '"colonize-mars"' '"CMDR"' --server maincloud`, then `spacetime call swarm-arena submit_goal <room> '"<title>"' 3 24 2000 30000 '[{"model":"z-ai/glm-4.7:nitro","role":"lead","count":1},{"model":"openai/gpt-oss-120b:nitro","role":"worker","count":3}]' --server maincloud`.
+- **Module:** `cd server && spacetime build`, then publish local with `spacetime publish swarm-arena-battle-test --server local --module-path server/spacetimedb --yes`. Cloud publish to `swarm-arena` needs `--delete-data=always` and explicit user approval.
+- **Create an op by CLI** (cloud/local shape): `spacetime call <db> create_room '"mars-front"' '"CMDR"' --server <server>`, then call `submit_goal` with `deadline_ms=3000`, `run_budget_micros=180000`, and crew rows like `[{"model":"z-ai/glm-4.7:nitro","role":"lead","count":1},{"model":"openai/gpt-oss-120b:nitro","role":"worker","count":2}]`.
 
 ---
 
@@ -108,28 +111,29 @@ Monitor: `GET https://app.coolify.io/api/v1/deployments/<deployment-uuid>` → `
 
 ---
 
-## 7. ⚠️ THE OPEN DESIGN PIVOT — start here
+## 7. ✅ CONFIRMED DESIGN PIVOT — start here
 
-The user has reframed the core game multiple times. The **latest, unresolved** conclusion (verbatim intent): *"it makes no sense as a 1v1 race or single-player — it only works if it's a fight/war."*
+The user has confirmed the fight model: **mix territory control and HQ capture.** The game is mainly **AI vs AI**, with humans controlling/managing the swarm at a commander level.
+
+Canonical spec: `docs/battle-mode.md`.
 
 **Why:** a race between two *productive* swarms is parallel solitaire (both just doing chores faster, no interaction). Single-player has no opponent. The fun requires **direct conflict**.
 
-**The proposed pivot (mine, not yet confirmed):** turn it into a **two-swarm fight over one shared battle-map** — Blue (player) vs Red (rival). The key realization: **SpacetimeDB's atomic `claim_task` IS combat** — when two enemy swarms lunge for the same contested point, whoever wins the atomic claim takes the ground. Mechanics: capture contested objectives, **assault** to flip enemy-held points, **sabotage** to disrupt enemy agents, supplies+clock as pressure. The war-room map becomes a real front line (blue/red territory shifting live). This also fixes "over too fast" (it's "hold the line till the clock runs out", not "finish the chores"). Start the rival as an **AI swarm** (playable solo immediately), add human-vs-human later.
+**Implemented mode:** two swarms fight over one shared battle-map — Blue (player-managed) vs Red (AI rival). The key realization: **SpacetimeDB's atomic `claim_task` IS combat**. Mechanics: capture contested objectives, assault to flip enemy-held points, sabotage/defend/scout, supplies as pressure, and HQ integrity as the primary kill condition.
 
-**I was about to ask which win-condition** when the user requested this handoff. The three options on the table:
-1. **Territory control** — capture & hold contested points; most territory when supplies/time run out wins (most "war", reuses atomic claim directly). *My recommendation.*
-2. **Capture the HQ** — push a lane through the tree to crack the enemy core (MOBA-style).
-3. **Attrition** — bleed the enemy's supplies dry; last swarm standing.
+**Win condition:** crack/capture the enemy HQ, or win on territory control when the clock/supplies expire. Start with Red as an **AI swarm** (playable solo immediately), add human-vs-human later.
 
-**Next-agent action: confirm the fight model with the user BEFORE building.** Given the churn history, do not start the big rework on assumption. Once confirmed, this is a substantial backend change (two teams / ownership / flipping / win conditions / an AI rival swarm).
+**Human role:** humans do not manually complete tasks. They issue high-leverage commander intent by selecting battlefield nodes and spending limited command tokens. AI agents perform the live scouting/assault/defense/sabotage loop.
+
+**Current tuning:** default draft is 3 Blue units mirrored to 3 Red units, `deadline_ms=3000`, runner default `SWARM_PACE_MS=8000`, `MAX_ACTIVE_BATTLE_TASKS=2`, immediate command-order surges, and battle crises disabled.
 
 ---
 
 ## 8. Known bugs / smaller TODOs
 
-- **Crisis card lingers on a finished op** — once `goal.status` is complete/stopped, active crises should be cleared (or the client should hide the card). Currently a `dust_storm`/`supply_leak` card can show over a COMPLETE board. (User noticed this.)
-- **After-Action verdict mid-run** shows "OPERATION ENDED" because the verdict only checks complete/stopped; viewing it before the op ends reads wrong. Minor.
-- **Pacing**: even with `SWARM_PACE_MS=4000`, a 24-objective op finishes in ~40-60s with 7 agents — still too fast for the human to meaningfully act. The fight pivot should fix this structurally; otherwise consider bigger missions / a phase-ladder.
+- **Cloud deployment pending:** battle schema is local only until user approves wiping/publishing cloud `swarm-arena`.
+- **Pacing:** latest short local 3v3 test produced 32 valid combat results, 0 late/invalid, ~$0.0086 estimated cost, a human order effect, Central Relay capture, and deeper front-line pressure instead of an instant HQ kill. Still watch it in a longer run before presenting.
+- **After-Action mid-run** now has battle stats but still can be opened before the match ends; copy may need polish for "live report" vs "final report".
 - **Dead code:** the old dark components `TopStrip.tsx`, `TaskGraph.tsx`, `AgentRoster.tsx`, `EventConsole.tsx`, `TaskInspector.tsx` (and `MissionSetup.tsx`) are unused now (replaced by `WarRoomSetup`/`WarRoomBoard`). The old dark CSS (`.app`, `.panel`, `.topstrip`, `.wb`/`.wr`/`.ar` are the live ones) is still in `styles.css`. Safe to delete the dark stuff once you're sure.
 - **Cost:** the deployed runner spends real OpenRouter credits on every launched op (capped at `SWARM_MAX_ROOMS=2`). To pause spend: `coolify app stop l49wky5ariv2qfo4rgans4k7`.
 
@@ -137,12 +141,13 @@ The user has reframed the core game multiple times. The **latest, unresolved** c
 
 ## 9. Model catalog (real, benchmarked)
 
-In `client/src/lib/missions.ts` (`MODELS`), with real pricing + bench-measured latency (`docs/model-routing.md`):
-- **Scout** `openai/gpt-oss-120b:nitro` — fast/cheap (~510ms p50), beats the 2s deadline. The reliable workhorse.
-- **Engineer** `z-ai/glm-4.7:nitro` — high quality, ~705ms, beats deadline.
-- **Runner** `inception/mercury-2:nitro` — mid.
-- **Oracle** `x-ai/grok-4.3:nitro` — genius-tier but slow + pricey, **misses the 2s deadline** (a trap).
-- **Surveyor** `google/gemini-3.1-flash-lite:nitro`, **Analyst** `deepseek/deepseek-v4-flash:nitro` — slow, often late.
+In `client/src/lib/missions.ts` (`MODELS`), with live OpenRouter pricing and strict structured-output checks:
+- **Scout** `openai/gpt-oss-120b:nitro` — default worker, pinned to Groq in the runner; tiny strict schema ~202ms avg, full worker schema ~1.12s avg; $0.039/$0.18 per M tokens.
+- **Engineer** `z-ai/glm-4.7:nitro` — default command, pinned to Cerebras in the runner; tiny strict schema ~230ms avg, full worker schema ~417ms avg; $0.40/$1.75 per M tokens.
+- **Runner** `inception/mercury-2:nitro` — reliable fallback, ~943ms p50, $0.25/$0.75 per M tokens.
+- **Surveyor** `google/gemini-3.1-flash-lite:nitro` — fast on the simple combat spot-check (~893ms avg) but previously slow on complex tasks.
+- **Skirmisher** `z-ai/glm-4.7-flash:nitro`, **Flash** `google/gemini-3.5-flash:nitro`, **Analyst** `deepseek/deepseek-v4-flash:nitro`, **Oracle** `x-ai/grok-4.3:nitro` — useful experiments, not defaults.
+- **Do not recommend** `openai/gpt-5.4-mini:nitro` or `openai/gpt-5.4-nano:nitro` for reducer-writing agents right now: both existed in the models endpoint but failed strict structured-output routing with `require_parameters`.
 
 The deadline interplay is a real strategic layer: slow/expensive models miss the per-task deadline → penalties.
 
@@ -150,4 +155,4 @@ The deadline interplay is a real strategic layer: slow/expensive models miss the
 
 ## 10. Status one-liner
 
-Single-player war-room game: **DONE & LIVE.** Next: **the fight/war pivot (§7) — confirm model with user, then build the two-swarm battle.**
+Battle-mode war-room game: **implemented and locally verified.** Next: get explicit approval to wipe/publish cloud `swarm-arena`, then redeploy web + runner and do one full public smoke test.

@@ -15,4 +15,5 @@ export default {
   name: __t.string(),
   model: __t.string(),
   role: __t.string(),
+  team: __t.string(),
 };

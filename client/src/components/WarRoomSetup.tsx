@@ -14,7 +14,6 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, preRoomId
     { uid: uid(), model: 'z-ai/glm-4.7:nitro', tier: 'command' },
     { uid: uid(), model: 'openai/gpt-oss-120b:nitro', tier: 'field' },
     { uid: uid(), model: 'openai/gpt-oss-120b:nitro', tier: 'field' },
-    { uid: uid(), model: 'openai/gpt-oss-120b:nitro', tier: 'field' },
   ]);
   const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<'idle' | 'creating' | 'submitting'>('idle');
@@ -28,10 +27,10 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, preRoomId
   const command = units.filter((u) => u.tier === 'command');
   const field = units.filter((u) => u.tier === 'field');
 
-  // estimated fleet burn ($/1k objective tokens, rough) from real pricing
+  // estimated fleet burn for one roughly 1k-token objective call per unit.
   const estBurn = units.reduce((s, u) => {
     const m = modelById(u.model);
-    return s + (m ? (m.priceIn * 0.5 + m.priceOut * 0.5) : 1.5);
+    return s + (m ? (m.priceIn * 500 + m.priceOut * 500) / 1_000_000 : 0.0015);
   }, 0);
 
   const crewSpec = (() => {
@@ -94,7 +93,7 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, preRoomId
           <div className="wr-tb-left">
             <div className="wr-stamp">OPERATIONS</div>
             <h1 className="wr-h1">SWARM ARENA</h1>
-            <div className="wr-sub">Field Command · assemble &amp; deploy an autonomous agent task force</div>
+            <div className="wr-sub">Human-commanded AI war · Blue drafts a fleet, Red mirrors it, agents fight live</div>
           </div>
           <div className="wr-tb-right">
             <div className="wr-reg">REV 2 · SECTOR M-04</div>
@@ -108,9 +107,14 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, preRoomId
           {MISSIONS.map((m) => (
             <button key={m.id} className={`wr-mtab ${m.id === missionId ? 'sel' : ''}`} onClick={() => setMissionId(m.id)}>
               <span className="wr-mtab-name">{m.name}</span>
-              <span className="wr-mtab-meta">{m.maxTasks} obj · {(m.deadlineMs / 1000).toFixed(1)}s · ${(m.supplyMicros / 1_000_000).toFixed(3)}</span>
+              <span className="wr-mtab-meta">{m.maxTasks} actions · {(m.deadlineMs / 1000).toFixed(1)}s · ${(m.supplyMicros / 1_000_000).toFixed(3)} supply</span>
             </button>
           ))}
+        </div>
+        <div className="wr-brief">
+          <span><b>Win</b> crack Red HQ or hold more territory</span>
+          <span><b>Draft</b> Blue fleet; Red mirrors it</span>
+          <span><b>Command</b> spend tokens to swing a node</span>
         </div>
 
         <div className="wr-grid">
@@ -131,7 +135,7 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, preRoomId
             <div className="wr-label-row">
               <span className="wr-label">03 · Command structure</span>
               <span className={`wr-points ${overCap ? 'over' : ''}`}>
-                CREW {pointsUsed}/{CREW_POINTS_CAP} <span className="wr-burn">· est. burn ${estBurn.toFixed(2)}/k</span>
+                CREW {pointsUsed}/{CREW_POINTS_CAP} <span className="wr-burn">· est. burn ${estBurn.toFixed(4)}/round</span>
               </span>
             </div>
 
@@ -196,6 +200,7 @@ function MarketCard({ m, onAdd }: { m: ModelCard; onAdd: () => void }) {
       <div className="wr-uc-price">
         ${m.priceIn.toFixed(2)} in · ${m.priceOut.toFixed(2)} out <span className="wr-uc-perm">/M tok</span>
       </div>
+      <div className="wr-uc-lat">strict JSON p50 ~{m.p50.toLocaleString()}ms</div>
       <div className="wr-uc-bars">
         <Bar label="SPD" v={m.speed} /><Bar label="QAL" v={m.quality} />
         {!m.beatsDeadline && <span className="wr-uc-late">LATE</span>}

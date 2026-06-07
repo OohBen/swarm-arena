@@ -28,6 +28,9 @@ export function useSwarm() {
         tables.agent,
         tables.event,
         tables.score,
+        tables.teamState,
+        tables.battleNode,
+        tables.battleOrder,
         tables.crisis,
       ]);
   }, [conn, isActive]);
@@ -39,6 +42,9 @@ export function useSwarm() {
   const [agents] = useTable(tables.agent);
   const [events] = useTable(tables.event);
   const [scores] = useTable(tables.score);
+  const [teamStates] = useTable(tables.teamState);
+  const [battleNodes] = useTable(tables.battleNode);
+  const [battleOrders] = useTable(tables.battleOrder);
   const [crises] = useTable(tables.crisis);
 
   return {
@@ -53,6 +59,9 @@ export function useSwarm() {
     agents: agents as any[],
     events: events as any[],
     scores: scores as any[],
+    teamStates: teamStates as any[],
+    battleNodes: battleNodes as any[],
+    battleOrders: battleOrders as any[],
     crises: crises as any[],
   };
 }

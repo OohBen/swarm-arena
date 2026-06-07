@@ -17,6 +17,7 @@ export default __t.row({
   name: __t.string(),
   model: __t.string(),
   role: __t.string(),
+  team: __t.string(),
   status: __t.string(),
   currentTaskId: __t.option(__t.u64()).name("current_task_id"),
   latestThought: __t.string().name("latest_thought"),

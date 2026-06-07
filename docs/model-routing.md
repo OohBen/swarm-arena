@@ -121,6 +121,52 @@ Decision:
 - Do not use `qwen/qwen3.6-flash:nitro` for reducer-writing paths until a repair layer is added.
 - Avoid `deepseek/deepseek-v4-flash:nitro`, `x-ai/grok-4.3:nitro`, `arcee-ai/trinity-mini:nitro`, and `google/gemini-3.1-flash-lite:nitro` for the hot loop if the user-visible deadline is 2 seconds.
 
+## Battle Combat Spot Check
+
+Run date: Sunday, June 7, 2026.
+
+Harness:
+
+- Vercel AI SDK `generateObject`.
+- Simple battle-action schema: action enum, rationale, confidence.
+- `:nitro`, strict structured output, `provider.require_parameters = true`.
+- Two requests per model, 15s local request timeout, no token cap.
+
+| Model | Strict valid | Average valid latency | Note |
+| --- | ---: | ---: | --- |
+| `z-ai/glm-4.7:nitro` | 2/2 | 547 ms | Still the best command default. |
+| `openai/gpt-oss-120b:nitro` | 2/2 | 782 ms | Still the best worker default. |
+| `google/gemini-3.1-flash-lite:nitro` | 2/2 | 893 ms | Fast on simple combat, but slower in the complex sweep above. |
+| `z-ai/glm-4.7-flash:nitro` | 1/2 | 2,020 ms | One 15s abort, so mark as risky. |
+| `deepseek/deepseek-v4-flash:nitro` | 1/2 | 3,193 ms | One 15s abort, too inconsistent for defaults. |
+| `google/gemini-3.5-flash:nitro` | 2/2 | 5,459 ms | Valid but too slow for live combat. |
+| `openai/gpt-5.4-mini:nitro` | 0/2 | n/a | No route accepted strict structured output with `require_parameters`. |
+| `openai/gpt-5.4-nano:nitro` | 0/2 | n/a | No route accepted strict structured output with `require_parameters`. |
+
+## Pinned Provider Route Check
+
+Run date: Sunday, June 7, 2026.
+
+The user specifically called out `openai/gpt-oss-120b` on Groq and `z-ai/glm-4.7` on Cerebras. Both routes work with `:nitro`, strict JSON schema, `require_parameters`, no token cap, and `allow_fallbacks: false`.
+
+Tiny raw battle-action schema:
+
+| Route | Strict valid | Average | p50 | Max |
+| --- | ---: | ---: | ---: | ---: |
+| `openai/gpt-oss-120b:nitro` + Groq | 4/4 | 202 ms | 175 ms | 285 ms |
+| `openai/gpt-oss-120b:nitro` + Cerebras | 4/4 | 228 ms | 165 ms | 362 ms |
+| `z-ai/glm-4.7:nitro` + Cerebras | 4/4 | 230 ms | 200 ms | 328 ms |
+| `z-ai/glm-4.7:nitro` + throughput default | 4/4 | 174 ms | 154 ms | 196 ms |
+
+Actual runner `WorkerSchema` path:
+
+| Route | Strict valid | Latencies | Average |
+| --- | ---: | --- | ---: |
+| `openai/gpt-oss-120b:nitro` + Groq | 3/3 | 1,097 ms, 1,120 ms, 1,144 ms | 1,120 ms |
+| `z-ai/glm-4.7:nitro` + Cerebras | 3/3 | 334 ms, 535 ms, 381 ms | 417 ms |
+
+Implementation decision: the runner pins `openai/gpt-oss-120b` to Groq and `z-ai/glm-4.7` to Cerebras in `runner/src/openrouter.ts`. Other models keep OpenRouter throughput sorting.
+
 Product idea: expose a model picker as a timed race. Operators can try different models, but each worker call has a 2-second deadline. Results that arrive late can be shown as "missed deadline" rather than applied to the task tree. This makes model speed visible and keeps the swarm from feeling stuck.
 
 ## Request Shape

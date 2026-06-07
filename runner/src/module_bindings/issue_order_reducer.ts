@@ -12,8 +12,7 @@ import {
 
 export default {
   roomId: __t.u64(),
-  name: __t.string(),
-  model: __t.string(),
-  role: __t.string(),
+  targetNodeId: __t.u64(),
+  orderType: __t.string(),
   team: __t.string(),
 };

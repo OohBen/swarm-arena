@@ -15,6 +15,7 @@ export default __t.row({
   roomId: __t.u64().name("room_id"),
   goalId: __t.u64().name("goal_id"),
   role: __t.string(),
+  team: __t.string(),
   model: __t.string(),
   count: __t.u32(),
 });

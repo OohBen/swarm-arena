@@ -8,6 +8,7 @@ export interface AgentConfig {
   name: string;
   model: string;
   role: string; // 'lead' | 'worker' | 'reviewer'
+  team?: string; // 'blue' | 'red'
   tickMs?: number;
 }
 
@@ -58,6 +59,9 @@ export class Agent {
         `SELECT * FROM task WHERE room_id = ${this.cfg.roomId}`,
         `SELECT * FROM agent WHERE room_id = ${this.cfg.roomId}`,
         `SELECT * FROM event WHERE room_id = ${this.cfg.roomId}`,
+        `SELECT * FROM battle_node WHERE room_id = ${this.cfg.roomId}`,
+        `SELECT * FROM team_state WHERE room_id = ${this.cfg.roomId}`,
+        `SELECT * FROM battle_order WHERE room_id = ${this.cfg.roomId}`,
       ]);
   }
 
@@ -67,8 +71,9 @@ export class Agent {
       name: this.cfg.name,
       model: this.cfg.model,
       role: this.cfg.role,
+      team: this.cfg.team ?? 'blue',
     });
-    console.log(`[${this.cfg.name}] registered as ${this.cfg.role} on ${this.cfg.model}`);
+    console.log(`[${this.cfg.name}] registered as ${this.cfg.team ?? 'blue'} ${this.cfg.role} on ${this.cfg.model}`);
     this.tickTimer = setInterval(() => {
       this.tick().catch((e) => console.error(`[${this.cfg.name}] tick error: ${String(e)}`));
     }, this.cfg.tickMs ?? 400);
@@ -124,6 +129,12 @@ export class Agent {
   private buildContext(task: any): { system: string; prompt: string } {
     const conn = this.conn!;
     const goal = conn.db.goal.id.find(task.goalId);
+    const node =
+      task.targetNodeId !== undefined && task.targetNodeId !== null
+        ? conn.db.battleNode.id.find(task.targetNodeId)
+        : null;
+    const team = task.team ?? this.cfg.team ?? 'blue';
+    const enemy = team === 'blue' ? 'red' : 'blue';
 
     const ancestors: string[] = [];
     let cur =
@@ -144,6 +155,54 @@ export class Agent {
 
     const maxDepth = goal?.maxDepth ?? 3;
     const atMaxDepth = task.depth >= maxDepth;
+
+    if (node) {
+      const nodes = [...conn.db.battleNode.iter()]
+        .filter((n: any) => n.roomId === this.cfg.roomId && n.goalId === task.goalId)
+        .sort((a: any, b: any) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+      const map = nodes
+        .map(
+          (n: any) =>
+            `- ${n.name}: owner=${n.owner}, status=${n.status}, fort=${n.fortification}, blue_pressure=${n.bluePressure}, red_pressure=${n.redPressure}` +
+            (n.kind === 'hq' ? `, hq=${n.hqIntegrity}` : '')
+        )
+        .join('\n');
+      const teamRows = [...conn.db.teamState.iter()]
+        .filter((s: any) => s.roomId === this.cfg.roomId && s.goalId === task.goalId)
+        .map((s: any) => `${s.team}: HQ ${s.hqIntegrity}, morale ${s.morale}, orders ${s.commandTokens}`)
+        .join(' | ');
+      const orders = [...conn.db.battleOrder.iter()]
+        .filter((o: any) => o.roomId === this.cfg.roomId && o.goalId === task.goalId && o.team === team && o.status === 'active')
+        .slice(-4)
+        .map((o: any) => `- ${o.orderType} node#${o.targetNodeId}`)
+        .join('\n');
+
+      const system = [
+        `You are a ${team.toUpperCase()} AI combat unit in Swarm Arena, a two-swarm battle run through SpacetimeDB reducers.`,
+        `Enemy team: ${enemy.toUpperCase()}. Humans command intent; AI agents execute.`,
+        'Return STRICT structured JSON matching the schema.',
+        'For combat tasks, almost always use outcome="done"; the server turns your result into combat pressure, capture progress, defense, sabotage, or HQ damage.',
+        'Use outcome="blocked" only when this action is tactically impossible. Do not spawn children for combat tasks.',
+        '"thought" is one short tactical radio update for the live commander UI.',
+      ].join('\n');
+
+      const prompt = [
+        `BATTLE: ${goal?.title ?? '(unknown)'}`,
+        `TEAM: ${team.toUpperCase()}`,
+        `ACTION: ${task.actionType}`,
+        `TARGET NODE: ${node.name} (${node.kind}, lane=${node.lane})`,
+        `TARGET STATE: owner=${node.owner}, status=${node.status}, fortification=${node.fortification}, blue_pressure=${node.bluePressure}, red_pressure=${node.redPressure}, hq_integrity=${node.hqIntegrity}`,
+        `TEAM STATE: ${teamRows || '(unknown)'}`,
+        orders ? `ACTIVE HUMAN/COMMAND ORDERS:\n${orders}` : '',
+        recent.length ? `RECENT BATTLE EVENTS:\n${recent.join('\n')}` : '',
+        `FULL MAP:\n${map}`,
+        'Write result as the concrete tactical execution of this one action. Mention the intended effect briefly.',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      return { system, prompt };
+    }
 
     const roleLine =
       this.cfg.role === 'lead'
@@ -215,7 +274,11 @@ export class Agent {
         prompt,
       });
 
-      const children = [object.child_1, object.child_2, object.child_3, object.child_4]
+      const isCombatTask = task.targetNodeId !== undefined && task.targetNodeId !== null;
+      const normalizedOutcome = isCombatTask && object.outcome === 'spawn_children' ? 'done' : object.outcome;
+      const children = isCombatTask
+        ? []
+        : [object.child_1, object.child_2, object.child_3, object.child_4]
         .map((c) => (c ?? '').trim())
         .filter((c) => c.length > 0);
 
@@ -232,7 +295,7 @@ export class Agent {
         agentId,
         taskId: task.id,
         worker: {
-          outcome: object.outcome,
+          outcome: normalizedOutcome,
           result: object.result,
           children,
           risk: object.risk,
@@ -242,7 +305,7 @@ export class Agent {
         estimatedCostMicros,
       });
       console.log(
-        `[${this.cfg.name}] ${object.outcome} "${task.title}" ${latencyMs}ms` +
+        `[${this.cfg.name}] ${normalizedOutcome} "${task.title}" ${latencyMs}ms` +
           (children.length ? ` (+${children.length} children)` : '')
       );
       conn.reducers.heartbeatAgent({ agentId, status: 'idle', latestThought: (object.thought ?? '').slice(0, 140) });
@@ -264,7 +327,7 @@ export class Agent {
       // Deliberate pace so the operation is watchable, not over in 15s. The
       // per-task deadline is unaffected (that's claim→post); this is downtime
       // between objectives. Tunable via SWARM_PACE_MS.
-      const pace = Number(process.env.SWARM_PACE_MS ?? 2200);
+      const pace = Number(process.env.SWARM_PACE_MS ?? 8000);
       if (pace > 0) await new Promise((r) => setTimeout(r, pace));
       this.processing = false;
     }

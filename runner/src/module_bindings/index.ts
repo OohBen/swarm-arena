@@ -39,6 +39,7 @@ import CreateRoomReducer from "./create_room_reducer";
 import HeartbeatAgentReducer from "./heartbeat_agent_reducer";
 import HeartbeatOperatorReducer from "./heartbeat_operator_reducer";
 import HumanOverrideReducer from "./human_override_reducer";
+import IssueOrderReducer from "./issue_order_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import PostResultReducer from "./post_result_reducer";
 import RegisterAgentReducer from "./register_agent_reducer";
@@ -49,6 +50,8 @@ import SubmitGoalReducer from "./submit_goal_reducer";
 
 // Import all table schema definitions
 import AgentRow from "./agent_table";
+import BattleNodeRow from "./battle_node_table";
+import BattleOrderRow from "./battle_order_table";
 import CrewSlotRow from "./crew_slot_table";
 import CrisisRow from "./crisis_table";
 import EventRow from "./event_table";
@@ -57,6 +60,7 @@ import OperatorRow from "./operator_table";
 import RoomRow from "./room_table";
 import ScoreRow from "./score_table";
 import TaskRow from "./task_table";
+import TeamStateRow from "./team_state_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -76,6 +80,47 @@ const tablesSchema = __schema({
       { name: 'agent_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, AgentRow),
+  battleNode: __table({
+    name: 'battle_node',
+    indexes: [
+      { accessor: 'goal_id', name: 'battle_node_goal_id_idx_btree', algorithm: 'btree', columns: [
+        'goalId',
+      ] },
+      { accessor: 'id', name: 'battle_node_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'room_id', name: 'battle_node_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+      { accessor: 'by_room_owner', name: 'battle_node_room_id_owner_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+        'owner',
+      ] },
+    ],
+    constraints: [
+      { name: 'battle_node_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, BattleNodeRow),
+  battleOrder: __table({
+    name: 'battle_order',
+    indexes: [
+      { accessor: 'goal_id', name: 'battle_order_goal_id_idx_btree', algorithm: 'btree', columns: [
+        'goalId',
+      ] },
+      { accessor: 'id', name: 'battle_order_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'room_id', name: 'battle_order_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+      { accessor: 'target_node_id', name: 'battle_order_target_node_id_idx_btree', algorithm: 'btree', columns: [
+        'targetNodeId',
+      ] },
+    ],
+    constraints: [
+      { name: 'battle_order_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, BattleOrderRow),
   crewSlot: __table({
     name: 'crew_slot',
     indexes: [
@@ -198,6 +243,23 @@ const tablesSchema = __schema({
       { name: 'task_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, TaskRow),
+  teamState: __table({
+    name: 'team_state',
+    indexes: [
+      { accessor: 'goal_id', name: 'team_state_goal_id_idx_btree', algorithm: 'btree', columns: [
+        'goalId',
+      ] },
+      { accessor: 'id', name: 'team_state_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'room_id', name: 'team_state_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'team_state_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, TeamStateRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -207,6 +269,7 @@ const reducersSchema = __reducers(
   __reducerSchema("heartbeat_agent", HeartbeatAgentReducer),
   __reducerSchema("heartbeat_operator", HeartbeatOperatorReducer),
   __reducerSchema("human_override", HumanOverrideReducer),
+  __reducerSchema("issue_order", IssueOrderReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("post_result", PostResultReducer),
   __reducerSchema("register_agent", RegisterAgentReducer),

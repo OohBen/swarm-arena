@@ -6,7 +6,7 @@ const MAX_AGENTS_PER_ROOM = 16; // hard safety cap on spawned agents per expedit
 export interface SupervisorConfig {
   uri: string;
   db: string;
-  crew: string[]; // models per staffed expedition
+  crew: string[]; // fallback models per staffed expedition
   maxRooms: number; // concurrency cap (bounds spend)
   pollMs?: number;
 }
@@ -71,13 +71,16 @@ export function runAuto(cfg: SupervisorConfig): void {
       // Deploy exactly the crew the player assembled (crew_slot rows). Fall back
       // to a default worker crew only if none was specified.
       const slots = [...conn.db.crewSlot.iter()].filter((s: any) => String(s.goalId) === String(g.id));
-      let specs: { model: string; role: string }[] = [];
+      let specs: { model: string; role: string; team: string }[] = [];
       if (slots.length > 0) {
         for (const s of slots) {
-          for (let k = 0; k < s.count; k++) specs.push({ model: s.model, role: s.role });
+          for (let k = 0; k < s.count; k++) specs.push({ model: s.model, role: s.role, team: s.team ?? 'blue' });
         }
       } else {
-        specs = cfg.crew.map((m) => ({ model: m, role: 'worker' }));
+        specs = cfg.crew.flatMap((m) => [
+          { model: m, role: 'worker', team: 'blue' },
+          { model: m, role: 'worker', team: 'red' },
+        ]);
       }
       specs = specs.slice(0, MAX_AGENTS_PER_ROOM); // safety cap on spend/resources
 
@@ -89,19 +92,21 @@ export function runAuto(cfg: SupervisorConfig): void {
 
       const roleCount: Record<string, number> = {};
       const crew = specs.map((sp) => {
-        roleCount[sp.role] = (roleCount[sp.role] ?? 0) + 1;
+        const key = `${sp.team}-${sp.role}`;
+        roleCount[key] = (roleCount[key] ?? 0) + 1;
         return new Agent({
           uri: cfg.uri,
           db: cfg.db,
           roomId: g.roomId,
-          name: `${sp.role}-${roleCount[sp.role]}`,
+          name: `${sp.team}-${sp.role}-${roleCount[key]}`,
           model: sp.model,
           role: sp.role,
+          team: sp.team,
         });
       });
       crew.forEach((a) => a.start());
       staffed.set(roomKey, crew);
-      console.log(`[supervisor] staffed expedition ${roomKey} with ${crew.length} agents (${specs.map((s) => s.role).join(',')})`);
+      console.log(`[supervisor] staffed battle ${roomKey} with ${crew.length} agents (${specs.map((s) => `${s.team}:${s.role}`).join(',')})`);
     }
   }, pollMs);
 }

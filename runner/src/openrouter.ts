@@ -35,7 +35,7 @@ function reasoningFor(id: string): { effort: 'none'; exclude: true } | undefined
 function makeModel(id: string) {
   const reasoning = reasoningFor(id);
   return openrouter.chat(id, {
-    provider: { require_parameters: true, sort: 'throughput' },
+    provider: providerFor(id),
     structuredOutputs: { strict: true },
     ...(reasoning ? { reasoning } : {}),
   });
@@ -43,6 +43,17 @@ function makeModel(id: string) {
 
 function baseModelId(id: string): string {
   return id.replace(/:(nitro|floor|free)$/, '');
+}
+
+function providerFor(id: string) {
+  const base = baseModelId(id);
+  if (base === 'openai/gpt-oss-120b') {
+    return { only: ['Groq'], allow_fallbacks: false, require_parameters: true };
+  }
+  if (base === 'z-ai/glm-4.7') {
+    return { only: ['Cerebras'], allow_fallbacks: false, require_parameters: true };
+  }
+  return { require_parameters: true, sort: 'throughput' as const };
 }
 
 let pricing: Map<string, { prompt: number; completion: number }> | null = null;

@@ -17,6 +17,7 @@ export const Agent = __t.object("Agent", {
   name: __t.string(),
   model: __t.string(),
   role: __t.string(),
+  team: __t.string(),
   status: __t.string(),
   currentTaskId: __t.option(__t.u64()),
   latestThought: __t.string(),
@@ -25,11 +26,54 @@ export const Agent = __t.object("Agent", {
 });
 export type Agent = __Infer<typeof Agent>;
 
+export const BattleNode = __t.object("BattleNode", {
+  id: __t.u64(),
+  roomId: __t.u64(),
+  goalId: __t.u64(),
+  nodeKey: __t.string(),
+  name: __t.string(),
+  kind: __t.string(),
+  lane: __t.string(),
+  owner: __t.string(),
+  status: __t.string(),
+  x: __t.i32(),
+  y: __t.i32(),
+  adjacentKeys: __t.string(),
+  fortification: __t.i32(),
+  bluePressure: __t.i32(),
+  redPressure: __t.i32(),
+  hqIntegrity: __t.i32(),
+  updatedAt: __t.timestamp(),
+});
+export type BattleNode = __Infer<typeof BattleNode>;
+
+export const BattleOrder = __t.object("BattleOrder", {
+  id: __t.u64(),
+  roomId: __t.u64(),
+  goalId: __t.u64(),
+  team: __t.string(),
+  targetNodeId: __t.u64(),
+  orderType: __t.string(),
+  priority: __t.u32(),
+  status: __t.string(),
+  issuedBy: __t.identity(),
+  createdAt: __t.timestamp(),
+  expiresAtMicros: __t.u64(),
+});
+export type BattleOrder = __Infer<typeof BattleOrder>;
+
+export const BattleTimer = __t.object("BattleTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type BattleTimer = __Infer<typeof BattleTimer>;
+
 export const CrewSlot = __t.object("CrewSlot", {
   id: __t.u64(),
   roomId: __t.u64(),
   goalId: __t.u64(),
   role: __t.string(),
+  team: __t.string(),
   model: __t.string(),
   count: __t.u32(),
 });
@@ -141,12 +185,30 @@ export const Task = __t.object("Task", {
   result: __t.option(__t.string()),
   risk: __t.option(__t.string()),
   confidence: __t.option(__t.string()),
+  team: __t.string(),
+  targetNodeId: __t.option(__t.u64()),
+  actionType: __t.string(),
+  priority: __t.u32(),
   latencyMs: __t.u32(),
   costMicros: __t.u64(),
   createdAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
 });
 export type Task = __Infer<typeof Task>;
+
+export const TeamState = __t.object("TeamState", {
+  id: __t.u64(),
+  roomId: __t.u64(),
+  goalId: __t.u64(),
+  team: __t.string(),
+  supplyMicros: __t.u64(),
+  morale: __t.i32(),
+  commandTokens: __t.i32(),
+  hqIntegrity: __t.i32(),
+  status: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type TeamState = __Infer<typeof TeamState>;
 
 export const WorkerResult = __t.object("WorkerResult", {
   outcome: __t.string(),

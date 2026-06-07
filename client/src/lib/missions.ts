@@ -11,53 +11,54 @@ export interface MissionTemplate {
 
 export const MISSIONS: MissionTemplate[] = [
   {
-    id: 'colonize-mars',
-    name: 'Colonize Mars',
-    flavor: 'Establish a self-sustaining colony on the red planet.',
+    id: 'mars-front',
+    name: 'Mars Front',
+    flavor: 'Blue and Red swarms fight for the central relay chain.',
     brief:
-      'Establish a self-sustaining human colony on Mars. Plan and execute the full expedition: secure life support and breathable air, extract water, generate power, build pressurized habitats, set up food production, and establish Earth communications. Break the colonization effort into concrete objectives and sub-objectives, then carry them out.',
-    maxDepth: 3,
-    maxTasks: 24,
-    deadlineMs: 2000,
-    supplyMicros: 30_000,
+      'Mars Front: command the Blue AI swarm against a rival Red swarm on a shared three-lane battle map. Capture neutral relays, fortify supply depots, break through enemy posts, and crack the Red HQ before supplies expire. If neither HQ falls, win by holding more territory.',
+    maxDepth: 2,
+    maxTasks: 80,
+    deadlineMs: 3000,
+    supplyMicros: 180_000,
   },
   {
-    id: 'lunar-gateway',
-    name: 'Build the Lunar Gateway',
-    flavor: 'Construct an orbital station and surface base on the Moon.',
+    id: 'lunar-siege',
+    name: 'Lunar Siege',
+    flavor: 'A tight relay fight around exposed lunar supply lines.',
     brief:
-      'Construct the Lunar Gateway: an orbital station plus a permanent surface base on the Moon. Decompose the build into transport, assembly, power, life support, science modules, and resupply logistics, and execute each workstream.',
-    maxDepth: 3,
-    maxTasks: 24,
-    deadlineMs: 2000,
-    supplyMicros: 30_000,
+      'Lunar Siege: Blue and Red AI swarms contest relay posts between two lunar HQs. Hold supply depots for extra command tokens, sabotage fortified enemy posts, and open a lane to destroy the Red HQ.',
+    maxDepth: 2,
+    maxTasks: 80,
+    deadlineMs: 3000,
+    supplyMicros: 180_000,
   },
   {
-    id: 'deep-space-rescue',
-    name: 'Deep Space Rescue',
-    flavor: 'A crew is stranded. Mount the rescue before life support fails.',
+    id: 'orbital-breach',
+    name: 'Orbital Breach',
+    flavor: 'Fast center-lane pressure with fragile HQ integrity.',
     brief:
-      'A research crew is stranded on a disabled vessel in deep space with failing life support. Mount a rescue operation: locate the vessel, plan the intercept, stabilize life support, execute the docking and evacuation, and get everyone home. Break the operation into urgent objectives and act fast.',
-    maxDepth: 3,
-    maxTasks: 20,
-    deadlineMs: 2000,
-    supplyMicros: 22_000,
+      'Orbital Breach: two autonomous swarms fight over docking relays around a damaged orbital platform. The commander must pick where Blue pushes, where it holds, and when to spend scarce orders before Red breaks through.',
+    maxDepth: 2,
+    maxTasks: 80,
+    deadlineMs: 3000,
+    supplyMicros: 160_000,
   },
   {
-    id: 'terraform',
-    name: 'Terraform Operation',
-    flavor: 'Kickstart the terraforming of a barren world.',
+    id: 'terraform-war',
+    name: 'Terraform War',
+    flavor: 'A longer territory-control match with more supply pressure.',
     brief:
-      'Kickstart the terraforming of a barren world: thicken the atmosphere, warm the surface, seed water cycles, and introduce engineered biology. Decompose the century-scale program into concrete first-phase objectives and execute them.',
-    maxDepth: 3,
-    maxTasks: 24,
-    deadlineMs: 2000,
-    supplyMicros: 30_000,
+      'Terraform War: Blue and Red agent fleets battle over terraforming infrastructure. Capture depots, defend relays, sabotage hardened posts, and either crack the enemy HQ or win by territory when supplies run out.',
+    maxDepth: 2,
+    maxTasks: 90,
+    deadlineMs: 3000,
+    supplyMicros: 220_000,
   },
 ];
 
-// Real OpenRouter models, rated from the project's own benchmark sweeps
-// (docs/model-routing.md). pts = crew-points cost (your draft cap is finite).
+// Real OpenRouter models. Latency values come from this repo's structured-output
+// sweeps plus the latest local spot checks; prices come from OpenRouter's live
+// models endpoint. pts = crew-points cost (your draft cap is finite).
 export interface ModelCard {
   id: string;
   name: string;
@@ -67,21 +68,23 @@ export interface ModelCard {
   cost: number; // 1-5 ($ per call)
   pts: number; // crew-points cost
   p50: number; // measured median latency, ms
-  beatsDeadline: boolean; // reliably under the 2s window?
+  beatsDeadline: boolean; // recommended for the 3s live combat window?
   priceIn: number; // $ per 1M input tokens (real OpenRouter pricing)
   priceOut: number; // $ per 1M output tokens
 }
 
 export const MODELS: ModelCard[] = [
-  { id: 'openai/gpt-oss-120b:nitro', name: 'Scout', tagline: 'Fast, cheap, beats the deadline every time.', speed: 5, quality: 4, cost: 1, pts: 2, p50: 510, beatsDeadline: true, priceIn: 0.10, priceOut: 0.50 },
-  { id: 'z-ai/glm-4.7:nitro', name: 'Engineer', tagline: 'High-quality work, still under the deadline.', speed: 4, quality: 5, cost: 2, pts: 4, p50: 705, beatsDeadline: true, priceIn: 0.40, priceOut: 1.60 },
-  { id: 'inception/mercury-2:nitro', name: 'Runner', tagline: 'Reliable fast fallback, mid cost.', speed: 4, quality: 4, cost: 3, pts: 3, p50: 1089, beatsDeadline: true, priceIn: 0.25, priceOut: 1.00 },
-  { id: 'x-ai/grok-4.3:nitro', name: 'Oracle', tagline: 'Genius-tier — but slow and pricey. Misses the 2s window.', speed: 2, quality: 5, cost: 5, pts: 6, p50: 3291, beatsDeadline: false, priceIn: 3.00, priceOut: 15.00 },
-  { id: 'google/gemini-3.1-flash-lite:nitro', name: 'Surveyor', tagline: 'Capable but inconsistent latency; often late.', speed: 2, quality: 4, cost: 2, pts: 3, p50: 6287, beatsDeadline: false, priceIn: 0.10, priceOut: 0.40 },
-  { id: 'deepseek/deepseek-v4-flash:nitro', name: 'Analyst', tagline: 'Cheap and thorough, but very slow.', speed: 1, quality: 4, cost: 2, pts: 2, p50: 8316, beatsDeadline: false, priceIn: 0.07, priceOut: 0.28 },
+  { id: 'openai/gpt-oss-120b:nitro', name: 'Scout', tagline: 'Groq-pinned strict JSON. Best worker default.', speed: 5, quality: 4, cost: 1, pts: 2, p50: 1120, beatsDeadline: true, priceIn: 0.039, priceOut: 0.18 },
+  { id: 'z-ai/glm-4.7:nitro', name: 'Engineer', tagline: 'Cerebras-pinned command model. Fastest high-quality lane.', speed: 5, quality: 5, cost: 2, pts: 4, p50: 417, beatsDeadline: true, priceIn: 0.40, priceOut: 1.75 },
+  { id: 'inception/mercury-2:nitro', name: 'Runner', tagline: 'Reliable fallback with solid tactical writing.', speed: 4, quality: 4, cost: 2, pts: 3, p50: 943, beatsDeadline: true, priceIn: 0.25, priceOut: 0.75 },
+  { id: 'google/gemini-3.1-flash-lite:nitro', name: 'Surveyor', tagline: 'Fast on simple combat, weaker on complex ops.', speed: 4, quality: 3, cost: 2, pts: 3, p50: 893, beatsDeadline: true, priceIn: 0.25, priceOut: 1.50 },
+  { id: 'z-ai/glm-4.7-flash:nitro', name: 'Skirmisher', tagline: 'Very cheap GLM variant, but route jitter is real.', speed: 3, quality: 3, cost: 1, pts: 1, p50: 2020, beatsDeadline: false, priceIn: 0.06, priceOut: 0.40 },
+  { id: 'x-ai/grok-4.3:nitro', name: 'Oracle', tagline: 'High reasoning budget, usually too slow for combat.', speed: 2, quality: 5, cost: 5, pts: 6, p50: 3291, beatsDeadline: false, priceIn: 1.25, priceOut: 2.50 },
+  { id: 'google/gemini-3.5-flash:nitro', name: 'Flash', tagline: 'Good text, but missed the live combat window.', speed: 2, quality: 4, cost: 4, pts: 4, p50: 5459, beatsDeadline: false, priceIn: 1.50, priceOut: 9.00 },
+  { id: 'deepseek/deepseek-v4-flash:nitro', name: 'Analyst', tagline: 'Cheap and thoughtful, too inconsistent for hot tasks.', speed: 2, quality: 4, cost: 1, pts: 2, p50: 3193, beatsDeadline: false, priceIn: 0.0983, priceOut: 0.1966 },
 ];
 
-export const CREW_POINTS_CAP = 20;
+export const CREW_POINTS_CAP = 14;
 
 export interface RoleDef {
   id: string;

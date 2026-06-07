@@ -129,6 +129,7 @@ if (AUTO) {
   if (mission) {
     await bootstrapGoal();
   }
+  const team = arg('team') ?? process.env.SWARM_TEAM ?? 'blue';
   const agents = models.map(
     (model, i) => {
       const role = i === 0 ? 'lead' : 'worker';
@@ -136,9 +137,10 @@ if (AUTO) {
         uri: URI,
         db: DB,
         roomId,
-        name: `${role}-${i + 1}`,
+        name: `${team}-${role}-${i + 1}`,
         model,
         role,
+        team,
       });
     }
   );

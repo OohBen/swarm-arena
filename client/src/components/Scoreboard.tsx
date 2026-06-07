@@ -7,11 +7,20 @@ function pctl(arr: number[], p: number): number {
   return s[Math.min(s.length - 1, Math.floor((s.length - 1) * p))];
 }
 
-export function Scoreboard({ goal, score, tasks, events, onBack }: any) {
+export function Scoreboard({ goal, score, tasks, teamStates = [], battleNodes = [], events, onBack }: any) {
   const done = tasks.filter((t: any) => t.status === 'done');
   const total = tasks.length;
   const completion = total ? Math.round((done.length / total) * 100) : 0;
   const deadlineMs = num(goal?.deadlineMs) || 2000;
+  const hasBattle = battleNodes.length > 0;
+  const blueTeam = teamStates.find((s: any) => s.team === 'blue') ?? null;
+  const redTeam = teamStates.find((s: any) => s.team === 'red') ?? null;
+  const winner = teamStates.find((s: any) => s.status === 'winner') ?? null;
+  const territoryNodes = battleNodes.filter((n: any) => n.kind !== 'hq');
+  const blueTerritory = territoryNodes.filter((n: any) => n.owner === 'blue').length;
+  const redTerritory = territoryNodes.filter((n: any) => n.owner === 'red').length;
+  const contested = battleNodes.filter((n: any) => n.status === 'contested' || n.status === 'damaged').length;
+  const combatDone = done.filter((t: any) => t.targetNodeId != null).length;
 
   const models: Record<string, any> = {};
   for (const t of tasks) {
@@ -50,14 +59,21 @@ export function Scoreboard({ goal, score, tasks, events, onBack }: any) {
 
   const complete = goal?.status === 'complete';
   const stopped = goal?.status === 'stopped';
-  const verdict = complete ? 'MISSION ACCOMPLISHED' : stopped ? 'SUPPLIES EXHAUSTED' : 'OPERATION ENDED';
+  const verdict = hasBattle
+    ? winner
+      ? `${String(winner.team).toUpperCase()} VICTORY`
+      : stopped
+        ? 'SUPPLIES EXHAUSTED'
+        : 'BATTLE ENDED'
+    : complete ? 'MISSION ACCOMPLISHED' : stopped ? 'SUPPLIES EXHAUSTED' : 'OPERATION ENDED';
+  const stampTone = hasBattle ? (winner?.team === 'blue' ? 'win' : 'fail') : complete ? 'win' : 'fail';
 
   return (
     <div className="ar">
       <div className="ar-sheet">
         <div className="ar-head">
           <div className="ar-head-l">
-            <span className={`ar-stamp ${complete ? 'win' : 'fail'}`}>{verdict}</span>
+            <span className={`ar-stamp ${stampTone}`}>{verdict}</span>
             <h1 className="ar-h1">AFTER-ACTION REPORT</h1>
             <div className="ar-op">{goal?.title}</div>
           </div>
@@ -68,14 +84,25 @@ export function Scoreboard({ goal, score, tasks, events, onBack }: any) {
           </div>
         </div>
 
-        <div className="ar-stats">
-          <Stat k="Completion" v={`${completion}%`} tone={completion === 100 ? 'good' : ''} />
-          <Stat k="On-Time" v={`${onTime}%`} tone={onTime >= 80 ? 'good' : 'warn'} />
-          <Stat k="Valid Output" v={`${validRate}%`} tone={validRate >= 90 ? 'good' : 'warn'} />
-          <Stat k="Objectives" v={done.length} />
-          <Stat k="Run Time" v={`${durationS}s`} />
-          <Stat k="Supplies Spent" v={`$${cost.toFixed(4)}`} tone="blue" />
-        </div>
+        {hasBattle ? (
+          <div className="ar-stats">
+            <Stat k="Territory" v={`${blueTerritory}-${redTerritory}`} tone={blueTerritory >= redTerritory ? 'good' : 'warn'} />
+            <Stat k="HQ Integrity" v={`${num(blueTeam?.hqIntegrity)}/${num(redTeam?.hqIntegrity)}`} tone={num(blueTeam?.hqIntegrity) >= num(redTeam?.hqIntegrity) ? 'good' : 'warn'} />
+            <Stat k="Contested" v={contested} />
+            <Stat k="On-Time" v={`${onTime}%`} tone={onTime >= 80 ? 'good' : 'warn'} />
+            <Stat k="Combat Actions" v={combatDone} />
+            <Stat k="Supplies Spent" v={`$${cost.toFixed(4)}`} tone="blue" />
+          </div>
+        ) : (
+          <div className="ar-stats">
+            <Stat k="Completion" v={`${completion}%`} tone={completion === 100 ? 'good' : ''} />
+            <Stat k="On-Time" v={`${onTime}%`} tone={onTime >= 80 ? 'good' : 'warn'} />
+            <Stat k="Valid Output" v={`${validRate}%`} tone={validRate >= 90 ? 'good' : 'warn'} />
+            <Stat k="Objectives" v={done.length} />
+            <Stat k="Run Time" v={`${durationS}s`} />
+            <Stat k="Supplies Spent" v={`$${cost.toFixed(4)}`} tone="blue" />
+          </div>
+        )}
 
         <div className="ar-cols">
           <div className="ar-panel">
@@ -104,15 +131,26 @@ export function Scoreboard({ goal, score, tasks, events, onBack }: any) {
           <div className="ar-panel ar-coord">
             <div className="ar-panel-h">COORDINATION · SPACETIMEDB</div>
             <div className="ar-coord-b">
-              <Line k="Objectives claimed (atomic)" v={tally('task_claimed')} tone="blue" />
-              <Line k="Sub-objectives spawned" v={tally('children_spawned')} />
-              <Line k="Crew recovered (stale lease)" v={tally('stale_recovery')} tone="warn" />
-              <Line k="Commander saves" v={tally('human_override')} tone="human" />
-              <Line k="Crises weathered" v={tally('crisis_resolved')} tone="warn" />
+              <Line k="Actions claimed (atomic)" v={tally('task_claimed')} tone="blue" />
+              {hasBattle ? (
+                <>
+                  <Line k="Human orders issued" v={tally('human_order')} tone="human" />
+                  <Line k="Nodes captured" v={tally('node_captured')} tone="blue" />
+                  <Line k="HQ strikes" v={tally('hq_hit')} tone="warn" />
+                  <Line k="Scout reports" v={tally('scout_report')} />
+                </>
+              ) : (
+                <>
+                  <Line k="Sub-objectives spawned" v={tally('children_spawned')} />
+                  <Line k="Crew recovered (stale lease)" v={tally('stale_recovery')} tone="warn" />
+                  <Line k="Commander saves" v={tally('human_override')} tone="human" />
+                  <Line k="Crises weathered" v={tally('crisis_resolved')} tone="warn" />
+                </>
+              )}
               <div className="ar-div" />
               <Line k="Deadline misses" v={tally('deadline_missed')} tone="bad" />
               <Line k="Invalid results" v={invalid} tone="bad" />
-              <Line k="Objectives lost" v={tally('task_blocked')} tone="bad" />
+              <Line k={hasBattle ? 'Actions blocked' : 'Objectives lost'} v={tally('task_blocked')} tone="bad" />
             </div>
           </div>
         </div>
