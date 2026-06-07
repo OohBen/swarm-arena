@@ -382,8 +382,8 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
           <span><b>Fight</b> AI agents claim combat tasks live</span>
         </div>
         <div className="wr-playbook">
-          <span><b>Draft</b> Command units take scout/recon work; field units execute assault, hold, and sabotage tasks.</span>
-          <span><b>Orders</b> A command token instantly nudges one node and queues priority work for your side's agents.</span>
+          <span><b>Draft</b> Command units run recon and increase order capacity; field units execute assault, hold, and sabotage tasks.</span>
+          <span><b>Orders</b> A command token instantly nudges one node and queues priority work for the matching agent role.</span>
           <span><b>Supply</b> Blue and Red spend separate supply pools when their own models answer.</span>
         </div>
 
@@ -527,6 +527,7 @@ function MarketCard({ m, disabled, onAdd }: { m: ModelCard; disabled: boolean; o
         <span className="wr-uc-pts">{m.pts}<i>pt</i></span>
       </div>
       <div className="wr-uc-id">{m.id.split('/')[1]}</div>
+      <div className="wr-uc-fit">{m.tagline}</div>
       <div className="wr-uc-price">
         ${m.priceIn.toFixed(2)} in · ${m.priceOut.toFixed(2)} out <span className="wr-uc-perm">/M tok</span>
       </div>

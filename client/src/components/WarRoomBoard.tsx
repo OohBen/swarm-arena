@@ -231,7 +231,7 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
               <div className="wb-deploy" title={runnerCmd}>{agents.length > 0 ? 'AUTONOMOUS FLEETS ONLINE' : 'AWAITING FLEET DAEMON'}</div>
               <div className="wb-loop">
                 <b>CONTROL LOOP</b>
-                <span>Orders boost one node, SpacetimeDB queues team tasks, agents claim them atomically, model results mutate the map.</span>
+                <span>Command units run recon and expand orders; field units claim combat tasks atomically; model results mutate the map.</span>
               </div>
               <div className="wb-btns">
                 <button className={`wb-btn ${complete || stopped ? 'hot' : ''}`} onClick={onBoard}>After-Action</button>

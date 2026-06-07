@@ -19,7 +19,7 @@ const CRISIS_INTERVAL_MICROS = 9_000_000n; // crisis director cadence
 const CRISIS_DEADLINE_MICROS = 16_000_000n; // window to respond before it bites
 const CRISIS_COOLDOWN_MICROS = 28_000_000n; // avoid crisis spam
 const BATTLE_INTERVAL_MICROS = 4_000_000n; // battle director cadence
-const MAX_COMMAND_TOKENS = 3;
+const MAX_COMMAND_TOKENS = 4;
 const MAX_ACTIVE_BATTLE_TASKS = 2;
 const DRAFT_POINTS_CAP = 14;
 const MAX_DRAFT_UNITS = 12;
@@ -36,7 +36,7 @@ const CRISIS_MSG: Record<string, string> = {
 };
 
 const MODEL_POINTS: Record<string, number> = {
-  'openai/gpt-oss-120b:nitro': 2,
+  'openai/gpt-oss-120b:nitro': 3,
   'z-ai/glm-4.7:nitro': 4,
   'inception/mercury-2:nitro': 3,
   'google/gemini-3.1-flash-lite:nitro': 3,
@@ -410,6 +410,25 @@ function validateDraft(rows: any[]): void {
   if (stats.units > MAX_DRAFT_UNITS) throw new SenderError('too many units');
   if (stats.points > DRAFT_POINTS_CAP) throw new SenderError('draft over point cap');
   if (!rows.some((s: any) => s.role === 'lead' && s.count > 0)) throw new SenderError('draft needs a command unit');
+  if (!rows.some((s: any) => s.role === 'worker' && s.count > 0)) throw new SenderError('draft needs a field unit');
+}
+
+function leadCount(rows: any[]): number {
+  return rows.reduce((sum, row) => sum + (row.role === 'lead' ? row.count : 0), 0);
+}
+
+function startingCommandTokens(rows: any[]): number {
+  return Math.min(MAX_COMMAND_TOKENS, 1 + leadCount(rows));
+}
+
+function commandTokenCap(ctx: any, goal_id: bigint, team: string): number {
+  const leads = [...ctx.db.crewSlot.goal_id.filter(goal_id)]
+    .filter((s: any) => s.team === team && s.role === 'lead')
+    .reduce((sum: number, s: any) => sum + s.count, 0);
+  const depotBonus = [...ctx.db.battleNode.goal_id.filter(goal_id)].filter(
+    (n: any) => n.owner === team && n.kind === 'depot'
+  ).length;
+  return Math.min(MAX_COMMAND_TOKENS + 1, 1 + Math.min(2, leads) + Math.min(1, depotBonus));
 }
 
 function teamCommander(ctx: any, room_id: bigint, team: string): any {
@@ -518,7 +537,7 @@ function maybeStartBattleFromDrafts(
     created_at: ctx.timestamp,
   });
 
-  seedBattlefield(ctx, room_id, g.id, run_budget_micros);
+  seedBattlefield(ctx, room_id, g.id, run_budget_micros, blueDraft, redDraft);
 
   for (const slot of [...blueDraft, ...redDraft]) {
     ctx.db.crewSlot.insert({
@@ -714,7 +733,7 @@ type NodeSpec = {
   hq?: number;
 };
 
-function seedBattlefield(ctx: any, room_id: bigint, goal_id: bigint, supply_micros: bigint): void {
+function seedBattlefield(ctx: any, room_id: bigint, goal_id: bigint, supply_micros: bigint, blueDraft: any[], redDraft: any[]): void {
   ctx.db.teamState.insert({
     id: 0n,
     room_id,
@@ -722,7 +741,7 @@ function seedBattlefield(ctx: any, room_id: bigint, goal_id: bigint, supply_micr
     team: 'blue',
     supply_micros,
     morale: 100,
-    command_tokens: 2,
+    command_tokens: startingCommandTokens(blueDraft),
     hq_integrity: HQ_MAX_INTEGRITY,
     status: 'fighting',
     updated_at: ctx.timestamp,
@@ -734,7 +753,7 @@ function seedBattlefield(ctx: any, room_id: bigint, goal_id: bigint, supply_micr
     team: 'red',
     supply_micros,
     morale: 100,
-    command_tokens: 2,
+    command_tokens: startingCommandTokens(redDraft),
     hq_integrity: HQ_MAX_INTEGRITY,
     status: 'fighting',
     updated_at: ctx.timestamp,
@@ -849,12 +868,54 @@ function confidenceBonus(confidence: string): number {
   return 0;
 }
 
-function modelBonus(model?: string): number {
+function modelBonus(model: string | undefined, action: string, required_role: string): number {
   if (!model) return 0;
-  if (/glm/i.test(model)) return 5;
-  if (/grok/i.test(model)) return 7;
-  if (/gpt-oss/i.test(model)) return 3;
-  if (/mercury/i.test(model)) return 2;
+  const lead = required_role === 'lead';
+  if (/gpt-oss/i.test(model)) {
+    if (action === 'scout') return lead ? 7 : 4;
+    if (action === 'defend' || action === 'reinforce') return 1;
+    if (action === 'sabotage') return -2;
+    return 0;
+  }
+  if (/glm-4\.7:nitro/i.test(model)) {
+    if (action === 'defend' || action === 'reinforce' || action === 'sabotage') return 9;
+    if (action === 'assault') return 7;
+    return lead ? 6 : 4;
+  }
+  if (/mercury/i.test(model)) {
+    if (action === 'assault') return 6;
+    if (action === 'defend' || action === 'reinforce') return 5;
+    if (action === 'sabotage') return 3;
+    return 3;
+  }
+  if (/gemini-3\.1-flash-lite/i.test(model)) {
+    if (action === 'scout') return 8;
+    if (action === 'defend' || action === 'reinforce') return 3;
+    return -1;
+  }
+  if (/glm-4\.7-flash/i.test(model)) {
+    if (action === 'sabotage') return 6;
+    if (action === 'assault') return 4;
+    return 2;
+  }
+  if (/grok/i.test(model)) {
+    if (action === 'scout' && lead) return 13;
+    if (action === 'sabotage') return 10;
+    if (action === 'defend' || action === 'reinforce') return 6;
+    if (action === 'assault') return 5;
+    return 8;
+  }
+  if (/gemini-3\.5-flash/i.test(model)) {
+    if (action === 'scout') return 7;
+    if (action === 'defend' || action === 'reinforce') return 7;
+    if (action === 'sabotage') return 6;
+    return 4;
+  }
+  if (/deepseek/i.test(model)) {
+    if (action === 'sabotage' || action === 'scout') return 7;
+    if (action === 'defend' || action === 'reinforce') return 5;
+    return 3;
+  }
   return 1;
 }
 
@@ -870,7 +931,7 @@ function combatPower(ctx: any, tk: any, worker: any, latency_ms: number): number
   const action = tk.action_type ?? 'assault';
   const speed = latency_ms > 0 && latency_ms <= Number(tk.deadline_ms) ? 6 : 0;
   const role = tk.required_role === 'lead' ? 4 : 0;
-  return (base[action] ?? 20) + confidenceBonus(worker.confidence) + modelBonus(tk.assigned_model) + speed + role + ctx.random.integerInRange(0, 10);
+  return (base[action] ?? 20) + confidenceBonus(worker.confidence) + modelBonus(tk.assigned_model, action, tk.required_role) + speed + role + ctx.random.integerInRange(0, 4);
 }
 
 function maybeEndBattle(ctx: any, goal_id: bigint, room_id: bigint, winner: string, reason: string): void {
@@ -1259,7 +1320,7 @@ export const submitGoal = spacetimedb.reducer(
       created_at: ctx.timestamp,
     });
 
-    seedBattlefield(ctx, room_id, g.id, run_budget_micros);
+    seedBattlefield(ctx, room_id, g.id, run_budget_micros, crew, crew);
 
     // Persist the assembled crew so the auto-runner deploys exactly this fleet.
     // Blue is human-commanded. Red mirrors the same fleet for a fair AI rival.
@@ -1369,10 +1430,11 @@ export const claimTask = spacetimedb.reducer(
       });
     if (pending.length === 0) return; // nothing to do; agent will retry
 
-    // Role preference: claim work matching this unit's role; fall back to any
-    // pending task so the swarm never deadlocks when a role is unstaffed.
+    // Role is a real draft decision: command units handle lead/recon work,
+    // field units handle combat work. No silent fallback into the other lane.
     const forRole = pending.filter((tk: any) => tk.required_role === a.role || tk.required_role === 'any');
-    const claimed = forRole.length > 0 ? forRole[0] : pending[0];
+    if (forRole.length === 0) return;
+    const claimed = forRole[0];
     ctx.db.task.id.update({
       ...claimed,
       status: 'claimed',
@@ -1854,10 +1916,7 @@ export const battleTick = spacetimedb.reducer(
 
       for (const ts of [...ctx.db.teamState.goal_id.filter(g.id)]) {
         if (ts.status !== 'fighting') continue;
-        const depotBonus = [...ctx.db.battleNode.goal_id.filter(g.id)].filter(
-          (n: any) => n.owner === ts.team && n.kind === 'depot'
-        ).length;
-        const maxTokens = MAX_COMMAND_TOKENS + Math.min(1, depotBonus);
+        const maxTokens = commandTokenCap(ctx, g.id, ts.team);
         if (ts.command_tokens < maxTokens) {
           ctx.db.teamState.id.update({
             ...ts,
