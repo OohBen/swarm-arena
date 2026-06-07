@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSwarm } from './lib/useSwarm';
-import { TopStrip } from './components/TopStrip';
-import { AgentRoster } from './components/AgentRoster';
-import { EventConsole } from './components/EventConsole';
-import { TaskGraph } from './components/TaskGraph';
-import { TaskInspector } from './components/TaskInspector';
 import { WarRoomSetup } from './components/WarRoomSetup';
+import { WarRoomBoard } from './components/WarRoomBoard';
 import { Scoreboard } from './components/Scoreboard';
 
 export default function App() {
@@ -86,48 +82,20 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <TopStrip goal={activeGoal} score={score} tasks={roomTasks} agents={roomAgents} />
-
-      <div className="rail-left">
-        <div className="panel">
-          <div className="panel-h">
-            <span className="micro">Command Deck</span>
-            <span className="micro">Expedition #{String(roomId)}</span>
-          </div>
-          <div className="panel-b">
-            <div className="kv" style={{ marginBottom: 8 }}>
-              <span className="k">Commanders</span>
-              <span className="vv">{roomOps.map((o: any) => o.displayName).join(', ') || '—'}</span>
-              <span className="k">Expedition</span>
-              <span className="vv">{activeGoal.status}</span>
-            </div>
-            <span className="micro">Deploy Crew (terminal)</span>
-            <div className="result-box" style={{ fontSize: 9.5, margin: '6px 0 10px' }}>{runnerCmd}</div>
-            <div className="btn-row">
-              <button
-                className={`btn ${activeGoal.status === 'complete' ? 'glow' : 'ghost'}`}
-                onClick={() => setView('board')}
-              >
-                ▣ After-Action
-              </button>
-              <button className="btn ghost" onClick={() => { setRoomId(null); setSelectedId(null); }}>
-                ◂ New Op
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <AgentRoster agents={roomAgents} tasks={roomTasks} />
-      </div>
-
-      <TaskGraph tasks={roomTasks} selectedId={selectedId} onSelect={setSelectedId} />
-
-      <div className="rail-right">
-        <TaskInspector task={selectedTask} agents={roomAgents} roomId={roomId} conn={conn} />
-      </div>
-
-      <EventConsole events={roomEvents} />
-    </div>
+    <WarRoomBoard
+      goal={activeGoal}
+      score={score}
+      tasks={roomTasks}
+      agents={roomAgents}
+      events={roomEvents}
+      ops={roomOps}
+      roomId={roomId}
+      conn={conn}
+      selectedId={selectedId}
+      setSelectedId={setSelectedId}
+      runnerCmd={runnerCmd}
+      onNewOp={() => { setRoomId(null); setSelectedId(null); }}
+      onBoard={() => setView('board')}
+    />
   );
 }

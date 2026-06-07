@@ -261,6 +261,11 @@ export class Agent {
       conn.reducers.heartbeatAgent({ agentId, status: 'idle', latestThought: 'worker error; task blocked' });
     } finally {
       clearInterval(hb);
+      // Deliberate pace so the operation is watchable, not over in 15s. The
+      // per-task deadline is unaffected (that's claim→post); this is downtime
+      // between objectives. Tunable via SWARM_PACE_MS.
+      const pace = Number(process.env.SWARM_PACE_MS ?? 2200);
+      if (pace > 0) await new Promise((r) => setTimeout(r, pace));
       this.processing = false;
     }
   }
