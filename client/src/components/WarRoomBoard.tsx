@@ -8,6 +8,33 @@ const STATUS: Record<string, string> = {
 };
 
 const OWNER_LABEL: Record<string, string> = { blue: 'BLUE', red: 'RED', neutral: 'NEUTRAL' };
+const ORDER_GUIDE: Record<string, { title: string; instant: string; queued: string }> = {
+  assault: {
+    title: 'Assault',
+    instant: '+18 pressure, trims enemy pressure and fortification',
+    queued: 'queues a high-priority worker assault',
+  },
+  reinforce: {
+    title: 'Reinforce',
+    instant: 'cuts enemy pressure and adds fortification',
+    queued: 'queues a worker hold on your own node',
+  },
+  defend: {
+    title: 'Hold',
+    instant: 'slows enemy capture pressure on the node',
+    queued: 'queues a worker defensive task',
+  },
+  sabotage: {
+    title: 'Sabotage',
+    instant: 'cuts fortification and adds light pressure',
+    queued: 'queues a worker sabotage task',
+  },
+  scout: {
+    title: 'Scout',
+    instant: 'marks the node with a small pressure nudge',
+    queued: 'queues a lead recon task',
+  },
+};
 
 // ---- objective tree layout (layered DAG) -------------------------------------
 const NW = 150, NH = 46, HG = 64, VG = 14, PAD = 26;
@@ -47,6 +74,10 @@ function clamp(n: number, min = 0, max = 100) { return Math.max(min, Math.min(ma
 function splitAdj(s: string) { return (s || '').split(',').map((x) => x.trim()).filter(Boolean); }
 function captureLimit(n: any) { return n?.owner === 'neutral' ? 160 : 220 + Math.floor((n?.fortification ?? 0) / 2); }
 function pressureGap(n: any) { return num(n?.bluePressure) - num(n?.redPressure); }
+function supplyLeft(teamState: any, fallbackBudget: number) {
+  if (!teamState) return fallbackBudget;
+  return num(teamState.supplyMicros);
+}
 function nodeCall(n: any) {
   if (!n) return 'Select a front-line node';
   if (n.kind === 'hq') return n.owner === 'red' ? 'Crack Red HQ' : 'Protect Blue HQ';
@@ -112,9 +143,11 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
 
   const valid = num(score?.validResults), late = num(score?.lateResults);
   const onTime = valid + late ? Math.round((valid / (valid + late)) * 100) : 100;
-  const spent = num(score?.estimatedCostMicros);
+  const totalSpent = num(score?.estimatedCostMicros);
   const budget = num(goal?.runBudgetMicros);
-  const supplyPct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+  const supplyPct = budget > 0 ? Math.min(100, (totalSpent / budget) * 100) : 0;
+  const blueSupply = supplyLeft(blueTeam, budget);
+  const redSupply = supplyLeft(redTeam, budget);
   const selTask = selectedId != null ? tasks.find((t: any) => t.id === selectedId) ?? null : null;
   const selNode = selectedId != null ? battleNodes.find((n: any) => n.id === selectedId) ?? null : null;
   const complete = goal?.status === 'complete';
@@ -164,15 +197,22 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
         )}
         <Stat k="Crew" v={`${working}/${agents.length}`} tone={working ? 'live' : ''} />
         {!hasBattle && <Stat k="On-time" v={`${onTime}%`} tone={onTime >= 80 ? 'good' : 'warn'} />}
-        <div className="wb-supply">
-          <span className="wb-k">Supplies</span>
-          <div className="wb-supbar"><div className={`wb-supfill ${supplyPct > 85 ? 'crit' : ''}`} style={{ width: `${100 - supplyPct}%` }} /></div>
-          <span className="wb-supnum">${((budget - spent) / 1_000_000).toFixed(4)} left</span>
-        </div>
+        {hasBattle ? (
+          <>
+            <TeamSupply team="blue" left={blueSupply} budget={budget} />
+            <TeamSupply team="red" left={redSupply} budget={budget} />
+          </>
+        ) : (
+          <div className="wb-supply">
+            <span className="wb-k">Supplies</span>
+            <div className="wb-supbar"><div className={`wb-supfill ${supplyPct > 85 ? 'crit' : ''}`} style={{ width: `${100 - supplyPct}%` }} /></div>
+            <span className="wb-supnum">${((budget - totalSpent) / 1_000_000).toFixed(4)} left</span>
+          </div>
+        )}
       </div>
       {hasBattle && (
         <div className="wb-situation">
-          <span className="wb-sit-chip">WIN · Red HQ or territory</span>
+          <span className="wb-sit-chip">WIN · HQ, territory, or supply</span>
           <span className="wb-sit-chip">NOW · {winner ? `${String(winner.team).toUpperCase()} victory` : nodeCall(mustHold ?? bestPush ?? selNode)}</span>
           <span className="wb-sit-chip">ORDER · {selNode ? nodeCall(selNode) : 'Central Relay'}</span>
         </div>
@@ -189,6 +229,10 @@ export function WarRoomBoard({ goal, score, tasks, agents, teamStates = [], batt
               <div className="wb-kv"><span>Red</span><b>{redOp?.displayName ?? '—'}</b></div>
               {shareUrl && <div className="wb-deploy share">{shareUrl}</div>}
               <div className="wb-deploy" title={runnerCmd}>{agents.length > 0 ? 'AUTONOMOUS FLEETS ONLINE' : 'AWAITING FLEET DAEMON'}</div>
+              <div className="wb-loop">
+                <b>CONTROL LOOP</b>
+                <span>Orders boost one node, SpacetimeDB queues team tasks, agents claim them atomically, model results mutate the map.</span>
+              </div>
               <div className="wb-btns">
                 <button className={`wb-btn ${complete || stopped ? 'hot' : ''}`} onClick={onBoard}>After-Action</button>
                 <button className="wb-btn" onClick={onNewOp}>New Op</button>
@@ -291,6 +335,17 @@ function Stat({ k, v, tone = '' }: any) {
   return <div className="wb-stat"><span className="wb-k">{k}</span><span className={`wb-v ${tone}`}>{v}</span></div>;
 }
 
+function TeamSupply({ team, left, budget }: { team: 'blue' | 'red'; left: number; budget: number }) {
+  const remaining = budget > 0 ? Math.max(0, Math.min(100, (left / budget) * 100)) : 100;
+  return (
+    <div className={`wb-supply team ${team}`}>
+      <span className="wb-k">{team} supply</span>
+      <div className="wb-supbar"><div className={`wb-supfill ${team} ${remaining < 18 ? 'crit' : ''}`} style={{ width: `${remaining}%` }} /></div>
+      <span className="wb-supnum">${(left / 1_000_000).toFixed(4)} left</span>
+    </div>
+  );
+}
+
 function BattleMap({ nodes, tasks, orders, selectedId, setSelectedId }: any) {
   const W = 980;
   const H = 520;
@@ -368,13 +423,13 @@ function BattleMap({ nodes, tasks, orders, selectedId, setSelectedId }: any) {
               <>
                 <rect className="wb-hqbar-bg" x="-45" y="13" width="88" height="6" />
                 <rect className="wb-hqbar" x="-45" y="13" width={clamp(n.hqIntegrity, 0, 100) * 0.88} height="6" />
-                <text className="wb-bnode-small" x="-45" y="27">HQ {n.hqIntegrity}%</text>
+                <text className="wb-bnode-small" x="-45" y="25">HQ {n.hqIntegrity}%</text>
               </>
             ) : (
               <>
-                <rect className="wb-pressure blue" x="-45" y="13" width={blueW} height="5" />
-                <rect className="wb-pressure red" x={45 - redW} y="19" width={redW} height="5" />
-                <text className="wb-bnode-small" x="-45" y="27">B{n.bluePressure} R{n.redPressure} · Q{queued}</text>
+                <rect className="wb-pressure blue" x="-45" y="12" width={blueW} height="5" />
+                <rect className="wb-pressure red" x={45 - redW} y="18" width={redW} height="5" />
+                <text className="wb-bnode-small" x="-45" y="25">B{n.bluePressure} R{n.redPressure} · Q{queued}</text>
               </>
             )}
           </g>
@@ -398,6 +453,8 @@ function BattleOrders({ node, team, teamStates, battleOrders, tasks, agents, roo
     .join(', ');
   const orders = battleOrders.filter((o: any) => o.targetNodeId === node.id && o.status === 'active' && (!team || o.team === team));
   const canOrder = Boolean(team) && tokens > 0;
+  const holdType = node.owner === team ? 'reinforce' : 'defend';
+  const guides = ['assault', holdType, 'sabotage', 'scout'].map((k) => ORDER_GUIDE[k]);
   const issue = (orderType: string) => {
     if (!team) return;
     conn?.reducers.issueOrder({ roomId, targetNodeId: node.id, orderType, team });
@@ -431,9 +488,18 @@ function BattleOrders({ node, team, teamStates, battleOrders, tasks, agents, roo
         </div>
       )}
       <div className="wb-orderlabel">{team ? `${team.toUpperCase()} COMMAND TOKENS` : 'SPECTATOR MODE'} · {tokens}</div>
+      <div className="wb-order-guide">
+        {guides.map((g) => (
+          <div key={g.title} className="wb-order-guide-row">
+            <b>{g.title}</b>
+            <span>{g.instant}</span>
+            <i>{g.queued}</i>
+          </div>
+        ))}
+      </div>
       <div className="wb-ord-grid">
         <button className="wb-ord primary" disabled={!canOrder} onClick={() => issue('assault')}>Assault</button>
-        <button className="wb-ord" disabled={!canOrder} onClick={() => issue(node.owner === 'blue' ? 'reinforce' : 'defend')}>{node.owner === 'blue' ? 'Reinforce' : 'Hold'}</button>
+        <button className="wb-ord" disabled={!canOrder} onClick={() => issue(holdType)}>{node.owner === team ? 'Reinforce' : 'Hold'}</button>
         <button className="wb-ord" disabled={!canOrder} onClick={() => issue('sabotage')}>Sabotage</button>
         <button className="wb-ord" disabled={!canOrder} onClick={() => issue('scout')}>Scout</button>
       </div>

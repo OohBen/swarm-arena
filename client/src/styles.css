@@ -518,13 +518,25 @@ body {
 .wr-mtab-meta { font-family: 'IBM Plex Mono'; font-size: 9.5px; color: #6b6553; }
 .wr-brief {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
-  margin: -10px 0 22px; border: 1.5px solid #1f1b14; background: #1f1b14;
+  margin: -10px 0 10px; border: 1.5px solid #1f1b14; background: #1f1b14;
 }
 .wr-brief span {
   background: #efe9d8; padding: 8px 12px; font-family: 'IBM Plex Mono';
   font-size: 10px; color: #4a4536; text-transform: uppercase; letter-spacing: 0.04em;
 }
 .wr-brief b { font-family: 'Oswald'; font-size: 11px; letter-spacing: 0.12em; color: #a8332e; margin-right: 6px; }
+.wr-playbook {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  margin: 0 0 22px;
+}
+.wr-playbook span {
+  min-width: 0; background: rgba(244,239,224,0.72); border: 1.5px solid rgba(31,27,20,0.35);
+  padding: 9px 11px; font-family: 'IBM Plex Mono'; font-size: 9.5px; color: #4a4536; line-height: 1.45;
+}
+.wr-playbook b {
+  display: block; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.14em; color: #1f1b14;
+  text-transform: uppercase; margin-bottom: 3px;
+}
 
 .wr-lobbybar {
   display: grid; grid-template-columns: 1fr minmax(320px, 520px); gap: 14px; align-items: end;
@@ -561,12 +573,18 @@ body {
 
 .wr-grid { display: grid; grid-template-columns: 1fr; gap: 22px; }
 
-/* roster / market — responsive card grid so it never becomes a tall column */
-.wr-market-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 10px; }
+/* roster / market — horizontal market so the draft stays in view */
+.wr-market { min-width: 0; }
+.wr-market-list {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(196px, 1fr);
+  grid-template-rows: 1fr; gap: 10px; overflow-x: auto; padding: 0 4px 8px 0;
+  scroll-snap-type: x proximity;
+}
 .wr-table { min-height: 0; }
 .wr-unit-card {
-  background: #f4efe0; border: 1.5px solid #1f1b14; padding: 10px 11px; cursor: grab;
+  min-width: 196px; background: #f4efe0; border: 1.5px solid #1f1b14; padding: 10px 11px; cursor: grab;
   box-shadow: 2px 2px 0 rgba(31,27,20,0.2); position: relative;
+  scroll-snap-align: start;
 }
 .wr-unit-card:active { cursor: grabbing; }
 .wr-unit-card.risky { background: #f1e7d2; }
@@ -604,6 +622,7 @@ body {
   background: rgba(46,90,140,0.04); transition: background 0.12s, border-color 0.12s;
 }
 .wr-tier.command { border-color: rgba(46,90,140,0.6); }
+.wr-tier.field { border-color: rgba(31,27,20,0.55); background: rgba(31,27,20,0.025); }
 .wr-tier-tag { position: absolute; top: -1px; left: -1px; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.16em; background: #1f1b14; color: #f4efe0; padding: 3px 9px; }
 .wr-tier.empty { background: rgba(31,27,20,0.02); }
 .wr-counters { display: flex; flex-wrap: wrap; gap: 9px; }
@@ -612,6 +631,8 @@ body {
   display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none;
   background: #f4efe0; border: 1.5px solid #2e5a8c; padding: 7px 11px; box-shadow: 2px 2px 0 rgba(46,90,140,0.3);
 }
+.wr-counter:not(.locked) { cursor: grab; }
+.wr-counter:not(.locked):active { cursor: grabbing; }
 .wr-counter.command { border-width: 2px; background: #eaf0f6; }
 .wr-table.red .wr-counter { border-color: #a8332e; box-shadow: 2px 2px 0 rgba(168,51,46,0.26); }
 .wr-table.red .wr-counter.command { background: #f2dfd7; }
@@ -621,7 +642,10 @@ body {
 .wr-counter:not(.locked):hover .wr-counter-x { opacity: 1; }
 .wr-counter-glyph { color: #2e5a8c; font-size: 12px; }
 .wr-counter-name { font-family: 'Saira Condensed'; font-weight: 700; font-size: 15px; }
-.wr-counter-x { font-size: 9px; color: #a8332e; opacity: 0; }
+.wr-counter-x {
+  appearance: none; background: transparent; border: none; padding: 0; margin: 0;
+  font-family: 'IBM Plex Mono'; font-size: 9px; color: #a8332e; opacity: 0; cursor: pointer;
+}
 .wr-spine { text-align: center; position: relative; margin: 4px 0; }
 .wr-spine::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; border-top: 1.5px solid rgba(31,27,20,0.35); }
 .wr-spine span { position: relative; background: #e8e2d0; padding: 0 12px; font-family: 'IBM Plex Mono'; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: #6b6553; }
@@ -672,9 +696,12 @@ body {
 .wb-stat .wb-v { font-family: 'Saira Condensed'; font-weight: 700; font-size: 17px; line-height: 1; }
 .wb-v.good { color: #2e5a8c; } .wb-v.bad { color: #a8332e; } .wb-v.warn { color: #b3631a; } .wb-v.live { color: #b3631a; }
 .wb-supply { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 12px; min-width: 122px; flex-shrink: 0; }
+.wb-supply.team { min-width: 112px; }
 .wb-mission { min-width: 90px; }
 .wb-supbar { height: 6px; background: rgba(168,51,46,0.18); border: 1px solid rgba(31,27,20,0.3); }
 .wb-supfill { height: 100%; background: #2e5a8c; }
+.wb-supfill.red { background: #a8332e; }
+.wb-supfill.blue { background: #2e5a8c; }
 .wb-supfill.crit { background: #a8332e; }
 .wb-supnum { font-family: 'IBM Plex Mono'; font-size: 9.5px; color: #1f1b14; }
 .wb-situation {
@@ -703,6 +730,13 @@ body {
 .wb-kv.col b { text-align: left; font-family: 'IBM Plex Sans'; font-weight: 400; font-size: 12px; line-height: 1.4; }
 .wb-deploy { font-family: 'IBM Plex Mono'; font-size: 8.5px; color: #6b6553; background: #ded7c2; border: 1px solid rgba(31,27,20,0.3); padding: 6px 7px; margin: 6px 0 9px; word-break: break-all; line-height: 1.5; }
 .wb-deploy.share { color: #2e5a8c; background: #eaf0f6; }
+.wb-loop {
+  background: #f4efe0; border: 1px solid rgba(31,27,20,0.35); padding: 7px 8px; margin: 0 0 9px;
+  font-family: 'IBM Plex Mono'; font-size: 8.5px; color: #6b6553; line-height: 1.45;
+}
+.wb-loop b {
+  display: block; font-family: 'Oswald'; font-size: 9px; letter-spacing: 0.14em; color: #1f1b14; margin-bottom: 2px;
+}
 .wb-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .wb-btn { cursor: pointer; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 7px; background: transparent; border: 1.5px solid #1f1b14; color: #1f1b14; }
 .wb-btn:hover { background: #1f1b14; color: #f4efe0; }
@@ -770,7 +804,8 @@ body {
 .wb-bnode.active .wb-bnode-band { animation: wbpulse 1s infinite; }
 .wb-bnode-hatch { fill: url(#mapHatch); }
 .wb-bnode-name { font-family: 'Saira Condensed'; font-weight: 800; font-size: 14px; fill: #1f1b14; }
-.wb-bnode-meta, .wb-bnode-small { font-family: 'IBM Plex Mono'; font-size: 8px; fill: #6b6553; letter-spacing: 0.04em; }
+.wb-bnode-meta { font-family: 'IBM Plex Mono'; font-size: 8px; fill: #6b6553; letter-spacing: 0.04em; }
+.wb-bnode-small { font-family: 'IBM Plex Mono'; font-size: 7px; fill: #6b6553; letter-spacing: 0; }
 .wb-hqbar-bg { fill: rgba(168,51,46,0.18); stroke: rgba(31,27,20,0.22); stroke-width: 0.8; }
 .wb-order-mark { pointer-events: none; }
 .wb-order-mark circle { fill: none; stroke-width: 2; stroke-dasharray: 7 5; animation: wbspin 6s linear infinite; transform-origin: center; }
@@ -799,6 +834,18 @@ body {
 .wb-active-orders { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
 .wb-active-orders span { font-family: 'IBM Plex Mono'; font-size: 9px; text-transform: uppercase; border: 1px solid #2e5a8c; color: #2e5a8c; padding: 3px 6px; background: #eaf0f6; }
 .wb-orderlabel { font-family: 'Oswald'; font-size: 9px; letter-spacing: 0.16em; color: #6b6553; margin: 12px 0 8px; }
+.wb-order-guide {
+  display: grid; gap: 5px; margin-bottom: 9px;
+}
+.wb-order-guide-row {
+  display: grid; grid-template-columns: 58px 1fr; gap: 2px 8px;
+  padding: 6px 7px; background: rgba(244,239,224,0.7); border: 1px solid rgba(31,27,20,0.22);
+}
+.wb-order-guide-row b { font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.08em; color: #1f1b14; text-transform: uppercase; }
+.wb-order-guide-row span { font-family: 'IBM Plex Mono'; font-size: 8.5px; color: #4a4536; line-height: 1.35; }
+.wb-order-guide-row i {
+  grid-column: 2; font-family: 'IBM Plex Mono'; font-size: 8px; font-style: normal; color: #8a836f; line-height: 1.3;
+}
 .wb-ord-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .wb-ord { cursor: pointer; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; padding: 8px; background: transparent; border: 1.5px solid #1f1b14; color: #1f1b14; }
 .wb-ord:hover { background: #2e5a8c; color: #f4efe0; border-color: #2e5a8c; }

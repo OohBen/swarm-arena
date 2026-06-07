@@ -905,6 +905,23 @@ function finishBattleByTerritory(ctx: any, goal_id: bigint, room_id: bigint, rea
   maybeEndBattle(ctx, goal_id, room_id, winner, `${reason}; territory ${blue}-${red}`);
 }
 
+function finishBattleBySupply(ctx: any, goal_id: bigint, room_id: bigint, exhaustedTeam: string): void {
+  maybeEndBattle(ctx, goal_id, room_id, enemyTeam(exhaustedTeam), `${exhaustedTeam.toUpperCase()} supplies exhausted`);
+}
+
+function chargeTeamSupply(ctx: any, goal_id: bigint, team: string, micros: bigint): string | null {
+  if (!isPlayableTeam(team) || micros <= 0n) return null;
+  const ts = teamRow(ctx, goal_id, team);
+  if (!ts || ts.status !== 'fighting') return null;
+  const next = ts.supply_micros > micros ? ts.supply_micros - micros : 0n;
+  ctx.db.teamState.id.update({
+    ...ts,
+    supply_micros: next,
+    updated_at: ctx.timestamp,
+  });
+  return next === 0n ? team : null;
+}
+
 function updateHqIntegrity(ctx: any, goal_id: bigint, team: string, integrity: number): void {
   const ts = teamRow(ctx, goal_id, team);
   if (ts) {
@@ -1339,6 +1356,10 @@ export const claimTask = spacetimedb.reducer(
     // Mission must be active (not complete / out of supplies).
     const activeGoal = [...ctx.db.goal.room_id.filter(room_id)].find((g: any) => g.status === 'active');
     if (!activeGoal) return;
+    if (isBattleGoal(ctx, activeGoal.id)) {
+      const ts = teamRow(ctx, activeGoal.id, a.team || 'blue');
+      if (!ts || ts.status !== 'fighting' || ts.supply_micros <= 0n) return;
+    }
 
     const pending = [...ctx.db.task.by_room_status.filter([room_id, 'pending'])]
       .filter((tk: any) => tk.goal_id === activeGoal.id && (tk.team || 'blue') === (a.team || 'blue'))
@@ -1394,21 +1415,25 @@ export const postResult = spacetimedb.reducer(
     const goal_id = tk.goal_id;
     const g = ctx.db.goal.id.find(goal_id);
     if (!g) throw new SenderError('goal not found');
+    const team = tk.team || 'blue';
+    const battle = isBattleGoal(ctx, goal_id);
 
-    // Cost is always recorded, even for late/invalid results.
+    // Cost is always recorded globally. In battle mode, it also burns only the
+    // side that made the call, so Blue and Red supplies diverge naturally.
     bumpScore(ctx, goal_id, 0n, { cost: estimated_cost_micros });
+    const exhaustedTeam = battle ? chargeTeamSupply(ctx, goal_id, team, estimated_cost_micros) : null;
+    const finishIfSupplyEmpty = () => {
+      if (exhaustedTeam) finishBattleBySupply(ctx, goal_id, room_id, exhaustedTeam);
+    };
 
     // Supply budget: once the run budget is spent, halt the mission. claim_task
-    // stops handing out work, so the swarm stands down. This is a loss condition.
-    if (g.run_budget_micros > 0n && g.status === 'active') {
+    // stops handing out work, so the swarm stands down. Non-battle missions use
+    // the legacy shared budget; battles use the per-team supply pools above.
+    if (!battle && g.run_budget_micros > 0n && g.status === 'active') {
       const s = ctx.db.score.goal_id.find(goal_id);
       if (s && s.estimated_cost_micros >= g.run_budget_micros) {
-        if (isBattleGoal(ctx, goal_id)) {
-          finishBattleByTerritory(ctx, goal_id, room_id, 'supplies exhausted');
-        } else {
-          ctx.db.goal.id.update({ ...g, status: 'stopped' });
-          emit(ctx, room_id, 'budget_exhausted', `Supplies exhausted — mission halted`, { goal_id });
-        }
+        ctx.db.goal.id.update({ ...g, status: 'stopped' });
+        emit(ctx, room_id, 'budget_exhausted', `Supplies exhausted — mission halted`, { goal_id });
       }
     }
 
@@ -1439,11 +1464,13 @@ export const postResult = spacetimedb.reducer(
       // A late result may have just blocked the final task — check completion so
       // the expedition can't get stuck "active" with no actionable work left.
       if (blocked) checkGoalComplete(ctx, goal_id, room_id);
+      finishIfSupplyEmpty();
       return;
     }
 
     if (tk.target_node_id !== undefined) {
       applyCombatResult(ctx, tk, worker, latency_ms, estimated_cost_micros);
+      finishIfSupplyEmpty();
       return;
     }
 
@@ -1468,6 +1495,7 @@ export const postResult = spacetimedb.reducer(
         agent_id,
       });
       checkGoalComplete(ctx, goal_id, room_id);
+      finishIfSupplyEmpty();
       return;
     }
 
@@ -1543,6 +1571,7 @@ export const postResult = spacetimedb.reducer(
         }
       }
       checkGoalComplete(ctx, goal_id, room_id);
+      finishIfSupplyEmpty();
       return;
     }
 
@@ -1565,6 +1594,7 @@ export const postResult = spacetimedb.reducer(
         agent_id,
       });
       checkGoalComplete(ctx, goal_id, room_id);
+      finishIfSupplyEmpty();
       return;
     }
 
@@ -1586,6 +1616,7 @@ export const postResult = spacetimedb.reducer(
       agent_id,
     });
     if (blocked) checkGoalComplete(ctx, goal_id, room_id);
+    finishIfSupplyEmpty();
   }
 );
 
@@ -1847,14 +1878,19 @@ export const battleTick = spacetimedb.reducer(
 function checkBudget(ctx: any, goal_id: bigint, room_id: bigint): void {
   const g = ctx.db.goal.id.find(goal_id);
   if (!g || g.status !== 'active' || g.run_budget_micros <= 0n) return;
+  if (isBattleGoal(ctx, goal_id)) {
+    for (const ts of [...ctx.db.teamState.goal_id.filter(goal_id)]) {
+      if (ts.status === 'fighting' && ts.supply_micros <= 0n) {
+        finishBattleBySupply(ctx, goal_id, room_id, ts.team);
+        return;
+      }
+    }
+    return;
+  }
   const s = ctx.db.score.goal_id.find(goal_id);
   if (s && s.estimated_cost_micros >= g.run_budget_micros) {
-    if (isBattleGoal(ctx, goal_id)) {
-      finishBattleByTerritory(ctx, goal_id, room_id, 'supplies exhausted');
-    } else {
-      ctx.db.goal.id.update({ ...g, status: 'stopped' });
-      emit(ctx, room_id, 'budget_exhausted', 'Supplies exhausted — mission halted', { goal_id });
-    }
+    ctx.db.goal.id.update({ ...g, status: 'stopped' });
+    emit(ctx, room_id, 'budget_exhausted', 'Supplies exhausted — mission halted', { goal_id });
   }
 }
 

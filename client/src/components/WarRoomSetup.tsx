@@ -173,6 +173,10 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
     if (!canEdit) return;
     setUnits((u) => [...u, { uid: uid(), model, tier }]);
   };
+  const moveUnit = (id: string, tier: 'command' | 'field') => {
+    if (!canEdit) return;
+    setUnits((u) => u.map((x) => (x.uid === id ? { ...x, tier } : x)));
+  };
   const removeUnit = (id: string) => {
     if (!canEdit) return;
     setUnits((u) => u.filter((x) => x.uid !== id));
@@ -180,6 +184,11 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
 
   const onDrop = (tier: 'command' | 'field') => (e: DragEvent) => {
     e.preventDefault();
+    const unitId = e.dataTransfer.getData('unit');
+    if (unitId) {
+      moveUnit(unitId, tier);
+      return;
+    }
     const model = e.dataTransfer.getData('model');
     if (model) addUnit(model, tier);
   };
@@ -264,6 +273,11 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
           <span><b>Red</b> second human drafts Red fleet</span>
           <span><b>Fight</b> AI agents claim combat tasks live</span>
         </div>
+        <div className="wr-playbook">
+          <span><b>Draft</b> Command units take scout/recon work; field units execute assault, hold, and sabotage tasks.</span>
+          <span><b>Orders</b> A command token instantly nudges one node and queues priority work for your side's agents.</span>
+          <span><b>Supply</b> Blue and Red spend separate supply pools when their own models answer.</span>
+        </div>
 
         {!room && (
           <div className="wr-dispatch compact">
@@ -302,7 +316,15 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                 <div className="wr-tier-tag">◆ COMMAND</div>
                 <div className="wr-counters">
                   {command.length === 0 && <div className="wr-drop">drop one Lead here</div>}
-                  {command.map((u) => <Counter key={u.uid} u={u} locked={!canEdit} onRemove={() => removeUnit(u.uid)} />)}
+                  {command.map((u) => (
+                    <Counter
+                      key={u.uid}
+                      u={u}
+                      locked={!canEdit}
+                      onRemove={() => removeUnit(u.uid)}
+                      onDragStart={(e) => e.dataTransfer.setData('unit', u.uid)}
+                    />
+                  ))}
                 </div>
               </div>
 
@@ -312,7 +334,15 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                 <div className="wr-tier-tag">▣ FIELD</div>
                 <div className="wr-counters">
                   {field.length === 0 && <div className="wr-drop">drop Workers here</div>}
-                  {field.map((u) => <Counter key={u.uid} u={u} locked={!canEdit} onRemove={() => removeUnit(u.uid)} />)}
+                  {field.map((u) => (
+                    <Counter
+                      key={u.uid}
+                      u={u}
+                      locked={!canEdit}
+                      onRemove={() => removeUnit(u.uid)}
+                      onDragStart={(e) => e.dataTransfer.setData('unit', u.uid)}
+                    />
+                  ))}
                 </div>
               </div>
 
@@ -403,14 +433,41 @@ function MarketCard({ m, disabled, onAdd }: { m: ModelCard; disabled: boolean; o
   );
 }
 
-function Counter({ u, locked, onRemove }: { u: Unit; locked: boolean; onRemove: () => void }) {
+function Counter({
+  u,
+  locked,
+  onRemove,
+  onDragStart,
+}: {
+  u: Unit;
+  locked: boolean;
+  onRemove: () => void;
+  onDragStart: (e: DragEvent<HTMLDivElement>) => void;
+}) {
   const m = modelById(u.model);
   const name = m?.name ?? u.model.split('/').pop()?.replace(/:.*$/, '') ?? u.model;
   return (
-    <div className={`wr-counter ${u.tier} ${locked ? 'locked' : ''}`} onClick={onRemove} title={locked ? 'draft locked' : 'click to remove'}>
+    <div
+      className={`wr-counter ${u.tier} ${locked ? 'locked' : ''}`}
+      draggable={!locked}
+      onDragStart={locked ? undefined : onDragStart}
+      title={locked ? 'draft locked' : 'drag between Command and Field'}
+    >
       <span className="wr-counter-glyph">{u.tier === 'command' ? '◆' : '▣'}</span>
       <span className="wr-counter-name">{name}</span>
-      {!locked && <span className="wr-counter-x">X</span>}
+      {!locked && (
+        <button
+          type="button"
+          className="wr-counter-x"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          aria-label={`Remove ${name}`}
+        >
+          X
+        </button>
+      )}
     </div>
   );
 }
