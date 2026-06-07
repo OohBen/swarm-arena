@@ -517,10 +517,11 @@ body {
 .wr-mtab-name { font-family: 'Saira Condensed'; font-weight: 700; font-size: 17px; }
 .wr-mtab-meta { font-family: 'IBM Plex Mono'; font-size: 9.5px; color: #6b6553; }
 
-.wr-grid { display: grid; grid-template-columns: 300px 1fr; gap: 22px; }
+.wr-grid { display: grid; grid-template-columns: 1fr; gap: 22px; }
 
-/* roster / market */
-.wr-market-list { display: flex; flex-direction: column; gap: 9px; }
+/* roster / market — responsive card grid so it never becomes a tall column */
+.wr-market-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(228px, 1fr)); gap: 10px; }
+.wr-table { min-height: 0; }
 .wr-unit-card {
   background: #f4efe0; border: 1.5px solid #1f1b14; padding: 10px 11px; cursor: grab;
   box-shadow: 2px 2px 0 rgba(31,27,20,0.2); position: relative;
