@@ -701,3 +701,22 @@ body {
 .wb-disp-k.k-budget_hit, .wb-disp-k.k-stale_recovery { color: #b3631a; }
 .wb-disp-k.k-human_override { color: #7a3a8a; }
 .wb-disp-m { color: #1f1b14; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* crisis alert */
+.wb-crisis-wrap { position: fixed; top: 64px; left: 0; right: 0; z-index: 60; display: flex; justify-content: center; pointer-events: none; }
+.wb-crisis {
+  pointer-events: auto; width: min(560px, 92vw); background: #f4efe0; border: 2px solid #a8332e;
+  box-shadow: 6px 6px 0 rgba(31,27,20,0.4); animation: wbdrop 0.25s ease;
+}
+@keyframes wbdrop { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+.wb-crisis-h { font-family: 'Saira Condensed'; font-weight: 800; font-size: 18px; letter-spacing: 0.04em; color: #f4efe0; background: #a8332e; padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; }
+.wb-crisis-t { font-family: 'IBM Plex Mono'; font-size: 12px; font-weight: 400; }
+.wb-crisis-msg { padding: 12px 14px 4px; font-size: 13px; color: #1f1b14; font-family: 'IBM Plex Sans'; }
+.wb-crisis-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 14px 14px; }
+.wb-crisis-btn { cursor: pointer; text-align: left; background: #e8e2d0; border: 1.5px solid #1f1b14; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
+.wb-crisis-btn:hover { background: #2e5a8c; border-color: #2e5a8c; }
+.wb-crisis-btn:hover b, .wb-crisis-btn:hover span { color: #f4efe0; }
+.wb-crisis-btn b { font-family: 'Saira Condensed'; font-weight: 700; font-size: 15px; color: #1f1b14; }
+.wb-crisis-btn span { font-family: 'IBM Plex Mono'; font-size: 9.5px; color: #6b6553; }
+.wb-disp-k.k-crisis { color: #fff; background: #a8332e; padding: 0 5px; }
+.wb-disp-k.k-crisis_resolved { color: #2e5a8c; }

@@ -28,6 +28,7 @@ export function useSwarm() {
         tables.agent,
         tables.event,
         tables.score,
+        tables.crisis,
       ]);
   }, [conn, isActive]);
 
@@ -38,6 +39,7 @@ export function useSwarm() {
   const [agents] = useTable(tables.agent);
   const [events] = useTable(tables.event);
   const [scores] = useTable(tables.score);
+  const [crises] = useTable(tables.crisis);
 
   return {
     conn,
@@ -51,5 +53,6 @@ export function useSwarm() {
     agents: agents as any[],
     events: events as any[],
     scores: scores as any[],
+    crises: crises as any[],
   };
 }

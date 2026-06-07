@@ -42,6 +42,7 @@ import HumanOverrideReducer from "./human_override_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import PostResultReducer from "./post_result_reducer";
 import RegisterAgentReducer from "./register_agent_reducer";
+import ResolveCrisisReducer from "./resolve_crisis_reducer";
 import SubmitGoalReducer from "./submit_goal_reducer";
 
 // Import all procedure arg schemas
@@ -49,6 +50,7 @@ import SubmitGoalReducer from "./submit_goal_reducer";
 // Import all table schema definitions
 import AgentRow from "./agent_table";
 import CrewSlotRow from "./crew_slot_table";
+import CrisisRow from "./crisis_table";
 import EventRow from "./event_table";
 import GoalRow from "./goal_table";
 import OperatorRow from "./operator_table";
@@ -91,6 +93,23 @@ const tablesSchema = __schema({
       { name: 'crew_slot_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, CrewSlotRow),
+  crisis: __table({
+    name: 'crisis',
+    indexes: [
+      { accessor: 'goal_id', name: 'crisis_goal_id_idx_btree', algorithm: 'btree', columns: [
+        'goalId',
+      ] },
+      { accessor: 'id', name: 'crisis_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'room_id', name: 'crisis_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'crisis_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CrisisRow),
   event: __table({
     name: 'event',
     indexes: [
@@ -191,6 +210,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("post_result", PostResultReducer),
   __reducerSchema("register_agent", RegisterAgentReducer),
+  __reducerSchema("resolve_crisis", ResolveCrisisReducer),
   __reducerSchema("submit_goal", SubmitGoalReducer),
 );
 

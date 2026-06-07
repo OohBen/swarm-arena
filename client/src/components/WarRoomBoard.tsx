@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { classOf } from '../lib/missions';
 import { num, ago, clockTime } from '../lib/format';
 
@@ -42,7 +42,44 @@ function layout(tasks: any[]) {
 
 function trunc(s: string, n: number) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
-export function WarRoomBoard({ goal, score, tasks, agents, events, ops, roomId, conn, selectedId, setSelectedId, runnerCmd, onNewOp, onBoard }: any) {
+const CRISIS_CARDS: Record<string, { title: string; choices: { label: string; detail: string }[] }> = {
+  dust_storm: { title: 'DUST STORM', choices: [{ label: 'Shelter crew', detail: 'spend supplies, stay safe' }, { label: 'Push through', detail: 'risk losing an objective' }] },
+  supply_leak: { title: 'SUPPLY LEAK', choices: [{ label: 'Seal breach', detail: 'costs supplies now' }, { label: 'Ration', detail: 'morale / score hit' }] },
+  equipment_failure: { title: 'EQUIPMENT FAILURE', choices: [{ label: 'Repair', detail: 'costs supplies, keep it' }, { label: 'Reroute', detail: 'lose the objective' }] },
+};
+
+function useTick() {
+  const [, set] = useState(0);
+  useEffect(() => {
+    const h = setInterval(() => set((x) => x + 1), 1000);
+    return () => clearInterval(h);
+  }, []);
+}
+
+function CrisisAlert({ crises, conn }: any) {
+  useTick();
+  if (!crises || crises.length === 0) return null;
+  const c = crises[0];
+  const card = CRISIS_CARDS[c.kind] ?? { title: c.kind, choices: [{ label: 'Respond', detail: '' }, { label: 'Ignore', detail: '' }] };
+  const remain = Math.max(0, Math.round((Number(c.deadlineMicros) / 1000 - Date.now()) / 1000));
+  return (
+    <div className="wb-crisis-wrap">
+      <div className="wb-crisis">
+        <div className="wb-crisis-h">⚠ CRISIS · {card.title} <span className="wb-crisis-t">{remain}s to respond</span></div>
+        <div className="wb-crisis-msg">{c.message}</div>
+        <div className="wb-crisis-choices">
+          {card.choices.map((ch, i) => (
+            <button key={i} className="wb-crisis-btn" onClick={() => conn?.reducers.resolveCrisis({ crisisId: c.id, choice: i })}>
+              <b>{ch.label}</b><span>{ch.detail}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function WarRoomBoard({ goal, score, tasks, agents, events, ops, crises, roomId, conn, selectedId, setSelectedId, runnerCmd, onNewOp, onBoard }: any) {
   const { nodes, edges, width, height } = useMemo(() => layout(tasks), [tasks]);
   const total = tasks.length;
   const done = tasks.filter((t: any) => t.status === 'done').length;
@@ -61,6 +98,7 @@ export function WarRoomBoard({ goal, score, tasks, agents, events, ops, roomId, 
 
   return (
     <div className="wb">
+      <CrisisAlert crises={crises} conn={conn} />
       {/* status bar */}
       <div className="wb-status">
         <div className="wb-brand"><span className="wb-stamp">OPS</span><span className="wb-title">SWARM ARENA</span></div>

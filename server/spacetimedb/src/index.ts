@@ -15,6 +15,15 @@ const STALE_AGENT_MICROS = 10_000_000n; // no heartbeat for 10s = dead crew (mar
 const REAP_INTERVAL_MICROS = 2_000_000n; // stale-agent sweep cadence
 const MAX_ATTEMPTS = 3; // task retries before it is blocked
 const LEAD_TIERS = 1; // task depths 0..LEAD_TIERS are Lead (strategy); deeper = Worker
+const CRISIS_INTERVAL_MICROS = 9_000_000n; // crisis director cadence
+const CRISIS_DEADLINE_MICROS = 16_000_000n; // window to respond before it bites
+
+const CRISIS_KINDS = ['dust_storm', 'supply_leak', 'equipment_failure'];
+const CRISIS_MSG: Record<string, string> = {
+  dust_storm: 'Dust storm grounding the crew — work is stalling.',
+  supply_leak: 'Coolant leak detected — supplies are bleeding out.',
+  equipment_failure: 'Critical equipment failure on an objective.',
+};
 
 // Score deltas (points is i64 -> bigint)
 const PTS_VALID = 100n;
@@ -159,8 +168,32 @@ const crewSlot = table(
   }
 );
 
+// Live crises the commander must respond to mid-operation.
+const crisis = table(
+  { name: 'crisis', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    room_id: t.u64().index('btree'),
+    goal_id: t.u64().index('btree'),
+    kind: t.string(), // 'dust_storm' | 'supply_leak' | 'equipment_failure'
+    message: t.string(),
+    status: t.string(), // 'active' | 'resolved' | 'expired'
+    choice: t.i32(), // -1 until resolved
+    created_at: t.timestamp(),
+    deadline_micros: t.u64(), // absolute micros-since-epoch deadline to respond
+  }
+);
+
 const reaperTimer = table(
   { name: 'reaper_timer', scheduled: (): any => reap },
+  {
+    scheduled_id: t.u64().primaryKey().autoInc(),
+    scheduled_at: t.scheduleAt(),
+  }
+);
+
+const crisisTimer = table(
+  { name: 'crisis_timer', scheduled: (): any => crisisTick },
   {
     scheduled_id: t.u64().primaryKey().autoInc(),
     scheduled_at: t.scheduleAt(),
@@ -192,7 +225,9 @@ const spacetimedb = schema({
   event,
   score,
   crewSlot,
+  crisis,
   reaperTimer,
+  crisisTimer,
 });
 export default spacetimedb;
 
@@ -264,6 +299,26 @@ function checkGoalComplete(ctx: any, goal_id: bigint, room_id: bigint): void {
   }
 }
 
+function addSupplyCost(ctx: any, goal_id: bigint, micros: bigint): void {
+  const s = ctx.db.score.goal_id.find(goal_id);
+  if (s) ctx.db.score.goal_id.update({ ...s, estimated_cost_micros: s.estimated_cost_micros + micros });
+}
+
+// Knock out up to n pending objectives (a crisis consequence).
+function blockPending(ctx: any, goal_id: bigint, room_id: bigint, n: number): number {
+  const pending = [...ctx.db.task.goal_id.filter(goal_id)]
+    .filter((tk: any) => tk.status === 'pending')
+    .sort((a: any, b: any) => (a.id < b.id ? 1 : -1)); // deepest/newest first
+  let hit = 0;
+  for (const tk of pending) {
+    if (hit >= n) break;
+    ctx.db.task.id.update({ ...tk, status: 'blocked', updated_at: ctx.timestamp });
+    hit += 1;
+  }
+  if (hit > 0) emit(ctx, room_id, 'task_blocked', `${hit} objective(s) lost to the crisis`, { goal_id });
+  return hit;
+}
+
 // Lifecycle ------------------------------------------------------------------
 
 export const init = spacetimedb.init((ctx) => {
@@ -271,6 +326,10 @@ export const init = spacetimedb.init((ctx) => {
   ctx.db.reaperTimer.insert({
     scheduled_id: 0n,
     scheduled_at: ScheduleAt.interval(REAP_INTERVAL_MICROS),
+  });
+  ctx.db.crisisTimer.insert({
+    scheduled_id: 0n,
+    scheduled_at: ScheduleAt.interval(CRISIS_INTERVAL_MICROS),
   });
 });
 
@@ -875,5 +934,89 @@ export const reap = spacetimedb.reducer(
         agent_id: aid,
       });
     }
+  }
+);
+
+// ---- Crisis director --------------------------------------------------------
+
+function checkBudget(ctx: any, goal_id: bigint, room_id: bigint): void {
+  const g = ctx.db.goal.id.find(goal_id);
+  if (!g || g.status !== 'active' || g.run_budget_micros <= 0n) return;
+  const s = ctx.db.score.goal_id.find(goal_id);
+  if (s && s.estimated_cost_micros >= g.run_budget_micros) {
+    ctx.db.goal.id.update({ ...g, status: 'stopped' });
+    emit(ctx, room_id, 'budget_exhausted', 'Supplies exhausted — mission halted', { goal_id });
+  }
+}
+
+// Apply a crisis outcome. choice 0/1 = commander's response; -1 = ignored/expired.
+function applyCrisisEffect(ctx: any, c: any, choice: number): void {
+  const room_id = c.room_id;
+  const goal_id = c.goal_id;
+  let msg = '';
+  if (c.kind === 'dust_storm') {
+    if (choice === 0) { addSupplyCost(ctx, goal_id, 4_000n); bumpScore(ctx, goal_id, 20n); msg = 'Sheltered the crew through the storm'; }
+    else if (choice === 1) { blockPending(ctx, goal_id, room_id, 1); bumpScore(ctx, goal_id, -60n); msg = 'Pushed through — lost an objective to the storm'; }
+    else { blockPending(ctx, goal_id, room_id, 2); bumpScore(ctx, goal_id, -120n); msg = 'Storm overran the site — objectives lost'; }
+  } else if (c.kind === 'supply_leak') {
+    if (choice === 0) { addSupplyCost(ctx, goal_id, 6_000n); bumpScore(ctx, goal_id, 20n); msg = 'Sealed the leak'; }
+    else if (choice === 1) { bumpScore(ctx, goal_id, -80n); msg = 'Rationed supplies — morale hit'; }
+    else { addSupplyCost(ctx, goal_id, 14_000n); bumpScore(ctx, goal_id, -100n); msg = 'Leak ran unchecked — supplies bled out'; }
+  } else { // equipment_failure
+    if (choice === 0) { addSupplyCost(ctx, goal_id, 5_000n); bumpScore(ctx, goal_id, 20n); msg = 'Repaired the equipment'; }
+    else if (choice === 1) { blockPending(ctx, goal_id, room_id, 1); bumpScore(ctx, goal_id, -40n); msg = 'Rerouted around the failure'; }
+    else { blockPending(ctx, goal_id, room_id, 2); bumpScore(ctx, goal_id, -120n); msg = 'Failure cascaded — objectives lost'; }
+  }
+  emit(ctx, room_id, 'crisis_resolved', msg, { goal_id });
+  checkBudget(ctx, goal_id, room_id);
+}
+
+export const crisisTick = spacetimedb.reducer(
+  { timer: crisisTimer.rowType },
+  (ctx, _args) => {
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+
+    // Expire overdue crises (the commander didn't respond in time).
+    for (const c of [...ctx.db.crisis.iter()]) {
+      if (c.status !== 'active') continue;
+      if (now <= c.deadline_micros) continue;
+      applyCrisisEffect(ctx, c, -1);
+      ctx.db.crisis.id.update({ ...c, status: 'expired', choice: -1 });
+    }
+
+    // Maybe throw a new crisis at each active operation with real work left.
+    for (const g of [...ctx.db.goal.iter()]) {
+      if (g.status !== 'active') continue;
+      const hasActive = [...ctx.db.crisis.iter()].some((c: any) => c.room_id === g.room_id && c.status === 'active');
+      if (hasActive) continue;
+      const hasWork = [...ctx.db.task.goal_id.filter(g.id)].some((tk: any) => tk.status === 'pending' || tk.status === 'claimed');
+      if (!hasWork) continue;
+      if (ctx.random() > 0.85) continue; // ~85% chance per cadence when eligible
+
+      const kind = CRISIS_KINDS[ctx.random.integerInRange(0, CRISIS_KINDS.length - 1)];
+      ctx.db.crisis.insert({
+        id: 0n,
+        room_id: g.room_id,
+        goal_id: g.id,
+        kind,
+        message: CRISIS_MSG[kind] ?? kind,
+        status: 'active',
+        choice: -1,
+        created_at: ctx.timestamp,
+        deadline_micros: now + CRISIS_DEADLINE_MICROS,
+      });
+      emit(ctx, g.room_id, 'crisis', `⚠ ${CRISIS_MSG[kind] ?? kind}`, { goal_id: g.id });
+    }
+  }
+);
+
+export const resolveCrisis = spacetimedb.reducer(
+  { crisis_id: t.u64(), choice: t.i32() },
+  (ctx, { crisis_id, choice }) => {
+    const c = ctx.db.crisis.id.find(crisis_id);
+    if (!c) throw new SenderError('crisis not found');
+    if (c.status !== 'active') return; // already handled
+    applyCrisisEffect(ctx, c, choice);
+    ctx.db.crisis.id.update({ ...c, status: 'resolved', choice });
   }
 );

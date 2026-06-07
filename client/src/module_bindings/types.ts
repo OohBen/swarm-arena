@@ -42,6 +42,25 @@ export const CrewSpec = __t.object("CrewSpec", {
 });
 export type CrewSpec = __Infer<typeof CrewSpec>;
 
+export const Crisis = __t.object("Crisis", {
+  id: __t.u64(),
+  roomId: __t.u64(),
+  goalId: __t.u64(),
+  kind: __t.string(),
+  message: __t.string(),
+  status: __t.string(),
+  choice: __t.i32(),
+  createdAt: __t.timestamp(),
+  deadlineMicros: __t.u64(),
+});
+export type Crisis = __Infer<typeof Crisis>;
+
+export const CrisisTimer = __t.object("CrisisTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type CrisisTimer = __Infer<typeof CrisisTimer>;
+
 export const Event = __t.object("Event", {
   id: __t.u64(),
   roomId: __t.u64(),

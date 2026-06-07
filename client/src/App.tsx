@@ -6,7 +6,7 @@ import { Scoreboard } from './components/Scoreboard';
 
 export default function App() {
   const swarm = useSwarm();
-  const { conn, identity, isActive, subscribed, goals, tasks, agents, events, scores, operators } = swarm;
+  const { conn, identity, isActive, subscribed, goals, tasks, agents, events, scores, operators, crises } = swarm;
 
   const [roomId, setRoomId] = useState<bigint | null>(null);
   const [selectedId, setSelectedId] = useState<bigint | null>(null);
@@ -89,6 +89,7 @@ export default function App() {
       agents={roomAgents}
       events={roomEvents}
       ops={roomOps}
+      crises={crises.filter((c: any) => c.roomId === roomId && c.status === 'active')}
       roomId={roomId}
       conn={conn}
       selectedId={selectedId}
