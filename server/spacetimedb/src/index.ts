@@ -14,6 +14,7 @@ import { ScheduleAt } from 'spacetimedb';
 const STALE_AGENT_MICROS = 10_000_000n; // no heartbeat for 10s = dead crew (margin for cloud jitter)
 const REAP_INTERVAL_MICROS = 2_000_000n; // stale-agent sweep cadence
 const MAX_ATTEMPTS = 3; // task retries before it is blocked
+const LEAD_TIERS = 1; // task depths 0..LEAD_TIERS are Lead (strategy); deeper = Worker
 
 // Score deltas (points is i64 -> bigint)
 const PTS_VALID = 100n;
@@ -59,6 +60,7 @@ const goal = table(
     max_depth: t.u32(),
     max_tasks: t.u32(),
     deadline_ms: t.u64(), // per-task deadline in ms
+    run_budget_micros: t.u64(), // mission supply budget; 0 = unlimited
     created_by: t.identity(),
     created_at: t.timestamp(),
   }
@@ -80,6 +82,7 @@ const task = table(
     title: t.string(),
     // 'pending' | 'claimed' | 'done' | 'blocked' | 'cancelled' | 'paused'
     status: t.string(),
+    required_role: t.string(), // 'lead' | 'worker' | 'any' — who should claim it
     depth: t.u32(),
     attempts: t.u32(),
     assigned_agent_id: t.option(t.u64()),
@@ -104,6 +107,7 @@ const agent = table(
     owner: t.identity(),
     name: t.string(),
     model: t.string(),
+    role: t.string(), // 'lead' | 'worker' | 'reviewer'
     status: t.string(), // 'idle' | 'working' | 'stopped' | 'stale'
     current_task_id: t.option(t.u64()),
     latest_thought: t.string(),
@@ -141,6 +145,20 @@ const score = table(
   }
 );
 
+// The crew the player assembled in the UI. The auto-runner reads these and
+// spawns exactly this fleet — so what you build is what deploys.
+const crewSlot = table(
+  { name: 'crew_slot', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    room_id: t.u64().index('btree'),
+    goal_id: t.u64().index('btree'),
+    role: t.string(), // 'lead' | 'worker' | 'reviewer'
+    model: t.string(),
+    count: t.u32(),
+  }
+);
+
 const reaperTimer = table(
   { name: 'reaper_timer', scheduled: (): any => reap },
   {
@@ -148,6 +166,13 @@ const reaperTimer = table(
     scheduled_at: t.scheduleAt(),
   }
 );
+
+// One crew slot as submitted by the client (model + role + how many).
+const CrewSpec = t.object('CrewSpec', {
+  model: t.string(),
+  role: t.string(),
+  count: t.u32(),
+});
 
 // Worker result is the strict structured output the agent runner submits.
 const WorkerResult = t.object('WorkerResult', {
@@ -166,6 +191,7 @@ const spacetimedb = schema({
   agent,
   event,
   score,
+  crewSlot,
   reaperTimer,
 });
 export default spacetimedb;
@@ -330,9 +356,10 @@ export const submitGoal = spacetimedb.reducer(
     max_depth: t.u32(),
     max_tasks: t.u32(),
     deadline_ms: t.u64(),
-    default_model: t.string(),
+    run_budget_micros: t.u64(),
+    crew: t.array(CrewSpec),
   },
-  (ctx, { room_id, title, max_depth, max_tasks, deadline_ms, default_model }) => {
+  (ctx, { room_id, title, max_depth, max_tasks, deadline_ms, run_budget_micros, crew }) => {
     const r = ctx.db.room.id.find(room_id);
     if (!r) throw new SenderError('room not found');
 
@@ -344,10 +371,14 @@ export const submitGoal = spacetimedb.reducer(
       max_depth,
       max_tasks,
       deadline_ms,
+      run_budget_micros,
       created_by: ctx.sender,
       created_at: ctx.timestamp,
     });
 
+    const leadModel = crew.find((c: any) => c.role === 'lead')?.model ?? crew[0]?.model ?? '';
+
+    // Root is a Lead objective — strategy belongs to the smart units.
     ctx.db.task.insert({
       id: 0n,
       room_id,
@@ -355,10 +386,11 @@ export const submitGoal = spacetimedb.reducer(
       parent_id: undefined,
       title,
       status: 'pending',
+      required_role: 'lead',
       depth: 0,
       attempts: 0,
       assigned_agent_id: undefined,
-      assigned_model: default_model.length > 0 ? default_model : undefined,
+      assigned_model: leadModel.length > 0 ? leadModel : undefined,
       claimed_at: undefined,
       deadline_ms,
       result: undefined,
@@ -369,6 +401,19 @@ export const submitGoal = spacetimedb.reducer(
       created_at: ctx.timestamp,
       updated_at: ctx.timestamp,
     });
+
+    // Persist the assembled crew so the auto-runner deploys exactly this fleet.
+    for (const slot of crew) {
+      if (slot.count <= 0 || slot.model.length === 0) continue;
+      ctx.db.crewSlot.insert({
+        id: 0n,
+        room_id,
+        goal_id: g.id,
+        role: slot.role,
+        model: slot.model,
+        count: slot.count,
+      });
+    }
 
     ctx.db.score.insert({
       goal_id: g.id,
@@ -387,8 +432,8 @@ export const submitGoal = spacetimedb.reducer(
 );
 
 export const registerAgent = spacetimedb.reducer(
-  { room_id: t.u64(), name: t.string(), model: t.string() },
-  (ctx, { room_id, name, model }) => {
+  { room_id: t.u64(), name: t.string(), model: t.string(), role: t.string() },
+  (ctx, { room_id, name, model, role }) => {
     if (!ctx.db.room.id.find(room_id)) throw new SenderError('room not found');
     // Names are unique-per-room by convention (runner assigns them), so the
     // client can rediscover its agent row by (room_id, name).
@@ -398,6 +443,7 @@ export const registerAgent = spacetimedb.reducer(
         ...existing,
         owner: ctx.sender,
         model,
+        role,
         status: 'idle',
         conn: ctx.connectionId ?? undefined,
         last_heartbeat: ctx.timestamp,
@@ -412,6 +458,7 @@ export const registerAgent = spacetimedb.reducer(
         owner: ctx.sender,
         name,
         model,
+        role,
         status: 'idle',
         current_task_id: undefined,
         latest_thought: '',
@@ -432,13 +479,19 @@ export const claimTask = spacetimedb.reducer(
     if (!a) throw new SenderError('agent not found');
     if (a.status === 'stopped') throw new SenderError('agent stopped');
 
-    // Earliest pending task in this room.
+    // Mission must be active (not complete / out of supplies).
+    const activeGoal = [...ctx.db.goal.room_id.filter(room_id)].find((g: any) => g.status === 'active');
+    if (!activeGoal) return;
+
     const pending = [...ctx.db.task.by_room_status.filter([room_id, 'pending'])].sort((x: any, y: any) =>
       x.id < y.id ? -1 : x.id > y.id ? 1 : 0
     );
     if (pending.length === 0) return; // nothing to do; agent will retry
 
-    const claimed = pending[0];
+    // Role preference: claim work matching this unit's role; fall back to any
+    // pending task so the swarm never deadlocks when a role is unstaffed.
+    const forRole = pending.filter((tk: any) => tk.required_role === a.role || tk.required_role === 'any');
+    const claimed = forRole.length > 0 ? forRole[0] : pending[0];
     ctx.db.task.id.update({
       ...claimed,
       status: 'claimed',
@@ -484,6 +537,16 @@ export const postResult = spacetimedb.reducer(
 
     // Cost is always recorded, even for late/invalid results.
     bumpScore(ctx, goal_id, 0n, { cost: estimated_cost_micros });
+
+    // Supply budget: once the run budget is spent, halt the mission. claim_task
+    // stops handing out work, so the swarm stands down. This is a loss condition.
+    if (g.run_budget_micros > 0n && g.status === 'active') {
+      const s = ctx.db.score.goal_id.find(goal_id);
+      if (s && s.estimated_cost_micros >= g.run_budget_micros) {
+        ctx.db.goal.id.update({ ...g, status: 'stopped' });
+        emit(ctx, room_id, 'budget_exhausted', `Supplies exhausted — mission halted`, { goal_id });
+      }
+    }
 
     // Deadline check.
     const now = ctx.timestamp.microsSinceUnixEpoch;
@@ -580,6 +643,8 @@ export const postResult = spacetimedb.reducer(
             parent_id: task_id,
             title: childTitle,
             status: 'pending',
+            // Strategy tiers stay with Leads; execution tiers go to Workers.
+            required_role: childDepth <= LEAD_TIERS ? 'lead' : 'worker',
             depth: childDepth,
             attempts: 0,
             assigned_agent_id: undefined,

@@ -6,10 +6,9 @@ export interface MissionTemplate {
   maxDepth: number;
   maxTasks: number;
   deadlineMs: number;
+  supplyMicros: number; // run budget — mission halts if spent (loss condition)
 }
 
-// The environment we provide: each expedition is a high-level objective the
-// player's AI crew must decompose and execute as a live objective tree.
 export const MISSIONS: MissionTemplate[] = [
   {
     id: 'colonize-mars',
@@ -20,6 +19,7 @@ export const MISSIONS: MissionTemplate[] = [
     maxDepth: 3,
     maxTasks: 24,
     deadlineMs: 2000,
+    supplyMicros: 30_000,
   },
   {
     id: 'lunar-gateway',
@@ -30,6 +30,7 @@ export const MISSIONS: MissionTemplate[] = [
     maxDepth: 3,
     maxTasks: 24,
     deadlineMs: 2000,
+    supplyMicros: 30_000,
   },
   {
     id: 'deep-space-rescue',
@@ -38,8 +39,9 @@ export const MISSIONS: MissionTemplate[] = [
     brief:
       'A research crew is stranded on a disabled vessel in deep space with failing life support. Mount a rescue operation: locate the vessel, plan the intercept, stabilize life support, execute the docking and evacuation, and get everyone home. Break the operation into urgent objectives and act fast.',
     maxDepth: 3,
-    maxTasks: 24,
+    maxTasks: 20,
     deadlineMs: 2000,
+    supplyMicros: 22_000,
   },
   {
     id: 'terraform',
@@ -50,55 +52,53 @@ export const MISSIONS: MissionTemplate[] = [
     maxDepth: 3,
     maxTasks: 24,
     deadlineMs: 2000,
+    supplyMicros: 30_000,
   },
 ];
 
-// The crew the player assembles. Each unit class maps to an OpenRouter model.
-export interface UnitClass {
-  id: string; // OpenRouter model id
-  klass: string; // game-facing class name
-  role: string;
-  blurb: string;
+// Real OpenRouter models, rated from the project's own benchmark sweeps
+// (docs/model-routing.md). pts = crew-points cost (your draft cap is finite).
+export interface ModelCard {
+  id: string;
+  name: string;
+  tagline: string;
   speed: number; // 1-5
   quality: number; // 1-5
-  cost: number; // 1-5 (higher = pricier)
+  cost: number; // 1-5 ($ per call)
+  pts: number; // crew-points cost
+  p50: number; // measured median latency, ms
+  beatsDeadline: boolean; // reliably under the 2s window?
 }
 
-export const UNIT_CLASSES: UnitClass[] = [
-  {
-    id: 'openai/gpt-oss-120b:nitro',
-    klass: 'Scout',
-    role: 'Worker',
-    blurb: 'Fast recon. Cheap, consistent, beats the deadline.',
-    speed: 5,
-    quality: 3,
-    cost: 1,
-  },
-  {
-    id: 'z-ai/glm-4.7:nitro',
-    klass: 'Engineer',
-    role: 'Reviewer',
-    blurb: 'Deep problem-solver. Higher quality, higher cost.',
-    speed: 4,
-    quality: 5,
-    cost: 3,
-  },
-  {
-    id: 'inception/mercury-2:nitro',
-    klass: 'Runner',
-    role: 'Worker',
-    blurb: 'Rapid responder. A reliable fast fallback.',
-    speed: 4,
-    quality: 3,
-    cost: 2,
-  },
+export const MODELS: ModelCard[] = [
+  { id: 'openai/gpt-oss-120b:nitro', name: 'Scout', tagline: 'Fast, cheap, beats the deadline every time.', speed: 5, quality: 4, cost: 1, pts: 2, p50: 510, beatsDeadline: true },
+  { id: 'z-ai/glm-4.7:nitro', name: 'Engineer', tagline: 'High-quality work, still under the deadline.', speed: 4, quality: 5, cost: 2, pts: 4, p50: 705, beatsDeadline: true },
+  { id: 'inception/mercury-2:nitro', name: 'Runner', tagline: 'Reliable fast fallback, mid cost.', speed: 4, quality: 4, cost: 3, pts: 3, p50: 1089, beatsDeadline: true },
+  { id: 'x-ai/grok-4.3:nitro', name: 'Oracle', tagline: 'Genius-tier — but slow and pricey. Misses the 2s window.', speed: 2, quality: 5, cost: 5, pts: 6, p50: 3291, beatsDeadline: false },
+  { id: 'google/gemini-3.1-flash-lite:nitro', name: 'Surveyor', tagline: 'Capable but inconsistent latency; often late.', speed: 2, quality: 4, cost: 2, pts: 3, p50: 6287, beatsDeadline: false },
+  { id: 'deepseek/deepseek-v4-flash:nitro', name: 'Analyst', tagline: 'Cheap and thorough, but very slow.', speed: 1, quality: 4, cost: 2, pts: 2, p50: 8316, beatsDeadline: false },
 ];
 
-export function unitFor(modelId?: string): UnitClass | undefined {
-  if (!modelId) return undefined;
-  return UNIT_CLASSES.find((u) => u.id === modelId || u.id.startsWith(modelId));
+export const CREW_POINTS_CAP = 20;
+
+export interface RoleDef {
+  id: string;
+  name: string;
+  tagline: string;
 }
 
+export const ROLES: RoleDef[] = [
+  { id: 'lead', name: 'Lead', tagline: 'Commands strategy — decomposes the mission into objectives.' },
+  { id: 'worker', name: 'Worker', tagline: 'Executes objectives on the ground.' },
+  { id: 'reviewer', name: 'Reviewer', tagline: 'Checks risky work and flags problems.' },
+];
+
+export function modelById(id?: string): ModelCard | undefined {
+  if (!id) return undefined;
+  return MODELS.find((m) => m.id === id || m.id.startsWith(id));
+}
+
+// Short display name for a model (used across the live board).
 export function classOf(modelId?: string): string {
-  return unitFor(modelId)?.klass ?? (modelId ? modelId.split('/').pop()!.replace(/:.*$/, '') : '—');
+  return modelById(modelId)?.name ?? (modelId ? modelId.split('/').pop()!.replace(/:.*$/, '') : '—');
 }

@@ -1,12 +1,7 @@
 import { Agent } from './agent';
 import { DbConnection, tables } from './module_bindings';
 
-function crewClass(id: string): string {
-  if (/gpt-oss/i.test(id)) return 'scout';
-  if (/glm/i.test(id)) return 'engineer';
-  if (/mercury/i.test(id)) return 'runner';
-  return (id.split('/').pop() ?? id).replace(/:(nitro|floor|free)$/, '');
-}
+const MAX_AGENTS_PER_ROOM = 16; // hard safety cap on spawned agents per expedition
 
 export interface SupervisorConfig {
   uri: string;
@@ -35,7 +30,7 @@ export function runAuto(cfg: SupervisorConfig): void {
           ready = true;
           console.log('[supervisor] online — watching for expeditions');
         })
-        .subscribe([tables.room, tables.goal, tables.agent, tables.task]);
+        .subscribe([tables.room, tables.goal, tables.agent, tables.task, tables.crewSlot]);
     })
     .onConnectError((_ctx, err) => console.error('[supervisor] connect error:', err.message))
     .onDisconnect(() => {
@@ -73,25 +68,40 @@ export function runAuto(cfg: SupervisorConfig): void {
       );
       if (!hasPending) continue;
 
+      // Deploy exactly the crew the player assembled (crew_slot rows). Fall back
+      // to a default worker crew only if none was specified.
+      const slots = [...conn.db.crewSlot.iter()].filter((s: any) => String(s.goalId) === String(g.id));
+      let specs: { model: string; role: string }[] = [];
+      if (slots.length > 0) {
+        for (const s of slots) {
+          for (let k = 0; k < s.count; k++) specs.push({ model: s.model, role: s.role });
+        }
+      } else {
+        specs = cfg.crew.map((m) => ({ model: m, role: 'worker' }));
+      }
+      specs = specs.slice(0, MAX_AGENTS_PER_ROOM); // safety cap on spend/resources
+
       const existing = [...conn.db.agent.iter()].filter((a: any) => a.roomId === g.roomId).length;
-      if (existing >= cfg.crew.length) {
+      if (existing >= specs.length) {
         staffed.set(roomKey, []); // already staffed elsewhere; just track it
         continue;
       }
 
-      const crew = cfg.crew.map(
-        (model, i) =>
-          new Agent({
-            uri: cfg.uri,
-            db: cfg.db,
-            roomId: g.roomId,
-            name: `${crewClass(model)}-${i + 1}`,
-            model,
-          })
-      );
+      const roleCount: Record<string, number> = {};
+      const crew = specs.map((sp) => {
+        roleCount[sp.role] = (roleCount[sp.role] ?? 0) + 1;
+        return new Agent({
+          uri: cfg.uri,
+          db: cfg.db,
+          roomId: g.roomId,
+          name: `${sp.role}-${roleCount[sp.role]}`,
+          model: sp.model,
+          role: sp.role,
+        });
+      });
       crew.forEach((a) => a.start());
       staffed.set(roomKey, crew);
-      console.log(`[supervisor] staffed expedition ${roomKey} with ${crew.length} agents`);
+      console.log(`[supervisor] staffed expedition ${roomKey} with ${crew.length} agents (${specs.map((s) => s.role).join(',')})`);
     }
   }, pollMs);
 }

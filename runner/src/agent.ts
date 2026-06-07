@@ -7,6 +7,7 @@ export interface AgentConfig {
   roomId: bigint;
   name: string;
   model: string;
+  role: string; // 'lead' | 'worker' | 'reviewer'
   tickMs?: number;
 }
 
@@ -61,8 +62,13 @@ export class Agent {
   }
 
   private afterSubscribed(conn: DbConnection): void {
-    conn.reducers.registerAgent({ roomId: this.cfg.roomId, name: this.cfg.name, model: this.cfg.model });
-    console.log(`[${this.cfg.name}] registered on ${this.cfg.model}`);
+    conn.reducers.registerAgent({
+      roomId: this.cfg.roomId,
+      name: this.cfg.name,
+      model: this.cfg.model,
+      role: this.cfg.role,
+    });
+    console.log(`[${this.cfg.name}] registered as ${this.cfg.role} on ${this.cfg.model}`);
     this.tickTimer = setInterval(() => {
       this.tick().catch((e) => console.error(`[${this.cfg.name}] tick error: ${String(e)}`));
     }, this.cfg.tickMs ?? 400);
@@ -139,8 +145,16 @@ export class Agent {
     const maxDepth = goal?.maxDepth ?? 3;
     const atMaxDepth = task.depth >= maxDepth;
 
+    const roleLine =
+      this.cfg.role === 'lead'
+        ? 'You are a LEAD strategist. Your job is to break high-level objectives into concrete sub-objectives — strongly prefer "spawn_children".'
+        : this.cfg.role === 'reviewer'
+          ? 'You are a REVIEWER. Execute carefully and flag risks; prefer "done" with a clear result and an honest "risk".'
+          : 'You are a WORKER. Your job is to execute this objective concretely — prefer "done"; only split if genuinely necessary.';
+
     const system = [
-      'You are a worker agent in a multi-agent swarm solving a mission modeled as a task tree.',
+      'You are an agent in a multi-agent swarm solving a mission modeled as a task tree.',
+      roleLine,
       'Return STRICT structured JSON matching the schema. Decide the OUTCOME for THIS task only:',
       '- "spawn_children": the task is broad and should be decomposed. Provide 2-4 concrete, non-overlapping subtasks in child_1..child_4; leave unused ones as empty strings.',
       '- "done": the task is concrete/atomic (or at max depth). Put the concrete deliverable in "result"; leave all child_* empty.',

@@ -18,6 +18,7 @@ export default __t.row({
   maxDepth: __t.u32().name("max_depth"),
   maxTasks: __t.u32().name("max_tasks"),
   deadlineMs: __t.u64().name("deadline_ms"),
+  runBudgetMicros: __t.u64().name("run_budget_micros"),
   createdBy: __t.identity().name("created_by"),
   createdAt: __t.timestamp().name("created_at"),
 });

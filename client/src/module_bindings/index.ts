@@ -48,6 +48,7 @@ import SubmitGoalReducer from "./submit_goal_reducer";
 
 // Import all table schema definitions
 import AgentRow from "./agent_table";
+import CrewSlotRow from "./crew_slot_table";
 import EventRow from "./event_table";
 import GoalRow from "./goal_table";
 import OperatorRow from "./operator_table";
@@ -73,6 +74,23 @@ const tablesSchema = __schema({
       { name: 'agent_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, AgentRow),
+  crewSlot: __table({
+    name: 'crew_slot',
+    indexes: [
+      { accessor: 'goal_id', name: 'crew_slot_goal_id_idx_btree', algorithm: 'btree', columns: [
+        'goalId',
+      ] },
+      { accessor: 'id', name: 'crew_slot_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'room_id', name: 'crew_slot_room_id_idx_btree', algorithm: 'btree', columns: [
+        'roomId',
+      ] },
+    ],
+    constraints: [
+      { name: 'crew_slot_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CrewSlotRow),
   event: __table({
     name: 'event',
     indexes: [

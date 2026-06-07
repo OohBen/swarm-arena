@@ -17,6 +17,7 @@ export default __t.row({
   parentId: __t.option(__t.u64()).name("parent_id"),
   title: __t.string(),
   status: __t.string(),
+  requiredRole: __t.string().name("required_role"),
   depth: __t.u32(),
   attempts: __t.u32(),
   assignedAgentId: __t.option(__t.u64()).name("assigned_agent_id"),

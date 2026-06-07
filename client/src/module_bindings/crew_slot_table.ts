@@ -13,13 +13,8 @@ import {
 export default __t.row({
   id: __t.u64().primaryKey(),
   roomId: __t.u64().name("room_id"),
-  owner: __t.identity(),
-  name: __t.string(),
-  model: __t.string(),
+  goalId: __t.u64().name("goal_id"),
   role: __t.string(),
-  status: __t.string(),
-  currentTaskId: __t.option(__t.u64()).name("current_task_id"),
-  latestThought: __t.string().name("latest_thought"),
-  conn: __t.option(__t.connectionId()),
-  lastHeartbeat: __t.timestamp().name("last_heartbeat"),
+  model: __t.string(),
+  count: __t.u32(),
 });

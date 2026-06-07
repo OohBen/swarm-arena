@@ -82,7 +82,8 @@ function bootstrapGoal(): Promise<void> {
               maxDepth,
               maxTasks,
               deadlineMs,
-              defaultModel: models[0],
+              runBudgetMicros: 0n, // unlimited for manual CLI runs
+              crew: models.map((m, i) => ({ model: m, role: i === 0 ? 'lead' : 'worker', count: 1 })),
             });
             const poll = setInterval(() => {
               const ok = [...c.db.goal.iter()].some(
@@ -129,14 +130,17 @@ if (AUTO) {
     await bootstrapGoal();
   }
   const agents = models.map(
-    (model, i) =>
-      new Agent({
+    (model, i) => {
+      const role = i === 0 ? 'lead' : 'worker';
+      return new Agent({
         uri: URI,
         db: DB,
         roomId,
-        name: `${crewClass(model)}-${i + 1}`,
+        name: `${role}-${i + 1}`,
         model,
-      })
+        role,
+      });
+    }
   );
   for (const a of agents) a.start();
   console.log(`launched ${agents.length} agent(s) into room ${roomId}: ${models.join(', ')}`);

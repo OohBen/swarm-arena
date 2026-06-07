@@ -10,11 +10,18 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+import {
+  CrewSpec,
+} from "./types";
+
 export default {
   roomId: __t.u64(),
   title: __t.string(),
   maxDepth: __t.u32(),
   maxTasks: __t.u32(),
   deadlineMs: __t.u64(),
-  defaultModel: __t.string(),
+  runBudgetMicros: __t.u64(),
+  get crew() {
+    return __t.array(CrewSpec);
+  },
 };

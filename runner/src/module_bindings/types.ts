@@ -16,6 +16,7 @@ export const Agent = __t.object("Agent", {
   owner: __t.identity(),
   name: __t.string(),
   model: __t.string(),
+  role: __t.string(),
   status: __t.string(),
   currentTaskId: __t.option(__t.u64()),
   latestThought: __t.string(),
@@ -23,6 +24,23 @@ export const Agent = __t.object("Agent", {
   lastHeartbeat: __t.timestamp(),
 });
 export type Agent = __Infer<typeof Agent>;
+
+export const CrewSlot = __t.object("CrewSlot", {
+  id: __t.u64(),
+  roomId: __t.u64(),
+  goalId: __t.u64(),
+  role: __t.string(),
+  model: __t.string(),
+  count: __t.u32(),
+});
+export type CrewSlot = __Infer<typeof CrewSlot>;
+
+export const CrewSpec = __t.object("CrewSpec", {
+  model: __t.string(),
+  role: __t.string(),
+  count: __t.u32(),
+});
+export type CrewSpec = __Infer<typeof CrewSpec>;
 
 export const Event = __t.object("Event", {
   id: __t.u64(),
@@ -45,6 +63,7 @@ export const Goal = __t.object("Goal", {
   maxDepth: __t.u32(),
   maxTasks: __t.u32(),
   deadlineMs: __t.u64(),
+  runBudgetMicros: __t.u64(),
   createdBy: __t.identity(),
   createdAt: __t.timestamp(),
 });
@@ -93,6 +112,7 @@ export const Task = __t.object("Task", {
   parentId: __t.option(__t.u64()),
   title: __t.string(),
   status: __t.string(),
+  requiredRole: __t.string(),
   depth: __t.u32(),
   attempts: __t.u32(),
   assignedAgentId: __t.option(__t.u64()),
