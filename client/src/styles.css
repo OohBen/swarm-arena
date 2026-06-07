@@ -638,8 +638,14 @@ body {
 .wr-counter.locked { cursor: default; opacity: 0.88; }
 .wr-counter:hover { background: #fff; }
 .wr-counter:not(.locked):hover .wr-counter-x { opacity: 1; }
+.wr-counter:not(.locked):hover .wr-counter-move { opacity: 1; }
 .wr-counter-glyph { color: #2e5a8c; font-size: 12px; }
 .wr-counter-name { font-family: 'Saira Condensed'; font-weight: 700; font-size: 15px; }
+.wr-counter-move {
+  appearance: none; background: transparent; border: 1px solid rgba(31,27,20,0.28); padding: 1px 4px; margin-left: 2px;
+  font-family: 'Oswald'; font-size: 8px; letter-spacing: 0.08em; color: #2e5a8c; opacity: 0; cursor: pointer;
+}
+.wr-table.red .wr-counter-move { color: #a8332e; }
 .wr-counter-x {
   appearance: none; background: transparent; border: none; padding: 0; margin: 0;
   font-family: 'IBM Plex Mono'; font-size: 9px; color: #a8332e; opacity: 0; cursor: pointer;

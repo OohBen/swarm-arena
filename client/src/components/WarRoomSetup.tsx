@@ -322,6 +322,7 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                       u={u}
                       locked={!canEdit}
                       onRemove={() => removeUnit(u.uid)}
+                      onMove={() => moveUnit(u.uid, 'field')}
                       onDragStart={(e) => e.dataTransfer.setData('unit', u.uid)}
                     />
                   ))}
@@ -340,6 +341,7 @@ export function WarRoomSetup({ conn, identity, isActive, rooms, goals, operators
                       u={u}
                       locked={!canEdit}
                       onRemove={() => removeUnit(u.uid)}
+                      onMove={() => moveUnit(u.uid, 'command')}
                       onDragStart={(e) => e.dataTransfer.setData('unit', u.uid)}
                     />
                   ))}
@@ -437,11 +439,13 @@ function Counter({
   u,
   locked,
   onRemove,
+  onMove,
   onDragStart,
 }: {
   u: Unit;
   locked: boolean;
   onRemove: () => void;
+  onMove: () => void;
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
 }) {
   const m = modelById(u.model);
@@ -455,6 +459,19 @@ function Counter({
     >
       <span className="wr-counter-glyph">{u.tier === 'command' ? '◆' : '▣'}</span>
       <span className="wr-counter-name">{name}</span>
+      {!locked && (
+        <button
+          type="button"
+          className="wr-counter-move"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMove();
+          }}
+          aria-label={`Move ${name} to ${u.tier === 'command' ? 'Field' : 'Command'}`}
+        >
+          {u.tier === 'command' ? 'FIELD' : 'CMD'}
+        </button>
+      )}
       {!locked && (
         <button
           type="button"
