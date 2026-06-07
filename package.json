@@ -1,0 +1,26 @@
+{
+  "name": "swarm",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "bench:harness": "node scripts/bench-llm-harnesses.mjs",
+    "bench:nitro": "node scripts/bench-nitro-agentic.mjs",
+    "bench:fleet": "node scripts/bench-fleet-complex.mjs",
+    "bench:fleet:top": "SWARM_BENCH_ROUNDS=5 SWARM_BENCH_MODELS='openai/gpt-oss-120b:nitro,z-ai/glm-4.7:nitro,inception/mercury-2:nitro' node scripts/bench-fleet-complex.mjs",
+    "test": "npm run bench:fleet:top"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@openrouter/ai-sdk-provider": "^2.9.0",
+    "@openrouter/sdk": "^0.12.79",
+    "ai": "^6.0.197",
+    "openai": "^6.42.0",
+    "zod": "^4.4.3"
+  }
+}
