@@ -573,37 +573,35 @@ body {
 
 .wr-grid { display: grid; grid-template-columns: 1fr; gap: 22px; }
 
-/* roster / market — horizontal market so the draft stays in view */
+/* roster / market — compact 4x2 market so the full choice set stays visible */
 .wr-market { min-width: 0; }
 .wr-market-list {
-  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(196px, 1fr);
-  grid-template-rows: 1fr; gap: 10px; overflow-x: auto; padding: 0 4px 8px 0;
-  scroll-snap-type: x proximity;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px; overflow: visible; padding: 0;
 }
 .wr-table { min-height: 0; }
 .wr-unit-card {
-  min-width: 196px; background: #f4efe0; border: 1.5px solid #1f1b14; padding: 10px 11px; cursor: grab;
+  min-width: 0; background: #f4efe0; border: 1.5px solid #1f1b14; padding: 8px 10px; cursor: grab;
   box-shadow: 2px 2px 0 rgba(31,27,20,0.2); position: relative;
-  scroll-snap-align: start;
 }
 .wr-unit-card:active { cursor: grabbing; }
 .wr-unit-card.risky { background: #f1e7d2; }
 .wr-unit-card.disabled { opacity: 0.55; cursor: not-allowed; }
 .wr-uc-head { display: flex; justify-content: space-between; align-items: baseline; }
-.wr-uc-name { font-family: 'Saira Condensed'; font-weight: 700; font-size: 17px; }
-.wr-uc-pts { font-family: 'Oswald'; font-weight: 700; font-size: 15px; color: #2e5a8c; }
+.wr-uc-name { font-family: 'Saira Condensed'; font-weight: 700; font-size: 16px; }
+.wr-uc-pts { font-family: 'Oswald'; font-weight: 700; font-size: 14px; color: #2e5a8c; }
 .wr-uc-pts i { font-family: 'IBM Plex Mono'; font-size: 8px; font-style: normal; color: #6b6553; }
 .wr-uc-id { font-family: 'IBM Plex Mono'; font-size: 9px; color: #6b6553; margin-top: -1px; }
-.wr-uc-price { font-family: 'IBM Plex Mono'; font-size: 10px; color: #1f1b14; margin: 6px 0 7px; }
+.wr-uc-price { font-family: 'IBM Plex Mono'; font-size: 9.5px; color: #1f1b14; margin: 5px 0 5px; }
 .wr-uc-perm { color: #6b6553; }
-.wr-uc-lat { font-family: 'IBM Plex Mono'; font-size: 9px; color: #6b6553; margin: -2px 0 8px; }
+.wr-uc-lat { font-family: 'IBM Plex Mono'; font-size: 8.5px; color: #6b6553; margin: -2px 0 6px; }
 .wr-uc-bars { display: flex; align-items: center; gap: 10px; }
 .wr-bar { display: flex; align-items: center; gap: 4px; font-family: 'IBM Plex Mono'; font-size: 8px; color: #6b6553; }
 .wr-bar i { font-style: normal; }
 .wr-bar b { width: 4px; height: 9px; background: rgba(31,27,20,0.18); display: inline-block; }
 .wr-bar b.on { background: #2e5a8c; }
 .wr-uc-late { font-family: 'Oswald'; font-size: 9px; letter-spacing: 0.1em; color: #a8332e; border: 1px solid #a8332e; padding: 0 4px; }
-.wr-uc-add { margin-top: 9px; width: 100%; cursor: pointer; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; padding: 6px; background: transparent; border: 1.5px solid #1f1b14; color: #1f1b14; }
+.wr-uc-add { margin-top: 7px; width: 100%; cursor: pointer; font-family: 'Oswald'; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; padding: 5px; background: transparent; border: 1.5px solid #1f1b14; color: #1f1b14; }
 .wr-uc-add:hover { background: #1f1b14; color: #f4efe0; }
 .wr-uc-add:disabled { opacity: 0.35; cursor: not-allowed; }
 .wr-uc-add:disabled:hover { background: transparent; color: #1f1b14; }
@@ -902,6 +900,8 @@ body {
   .wr-commanders { grid-template-columns: 1fr; }
   .wr-missions { grid-template-columns: repeat(2, 1fr); }
   .wr-brief { grid-template-columns: 1fr; }
+  .wr-playbook { grid-template-columns: 1fr; }
+  .wr-market-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wb { grid-template-rows: 50px 64px 1fr 150px; }
   .wb-situation { grid-template-columns: 1fr; gap: 4px; }
   .wb-sit-chip { min-height: 20px; }
