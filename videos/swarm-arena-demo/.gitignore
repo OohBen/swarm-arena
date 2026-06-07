@@ -1,0 +1,9 @@
+snapshots/
+capture/
+capture-setup/
+dist/
+*.mp4
+*.mov
+*.webm
+*.wav
+*.mp3

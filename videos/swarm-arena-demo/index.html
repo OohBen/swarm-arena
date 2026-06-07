@@ -1,0 +1,1195 @@
+<!doctype html>
+<html lang="en" data-resolution="landscape">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Swarm Arena HyperFrames Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Saira Condensed";
+        src: url("assets/fonts/EJRLQgErUN8XuHNEtX81i9TmEkrnBc1g8A.ttf");
+        font-weight: 800;
+      }
+      @font-face {
+        font-family: "Saira Condensed";
+        src: url("assets/fonts/EJRLQgErUN8XuHNEtX81i9TmEkrnfc9g8A.ttf");
+        font-weight: 600;
+      }
+      @font-face {
+        font-family: "Oswald";
+        src: url("assets/fonts/TK3_WkUHHAIjg75cFRf3bXL8LICs1y9ogUE.ttf");
+        font-weight: 600;
+      }
+      @font-face {
+        font-family: "IBM Plex Mono";
+        src: url("assets/fonts/-F63fjptAgt5VM-kVkqdyU8n5ig.ttf");
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: "IBM Plex Mono";
+        src: url("assets/fonts/-F6qfjptAgt5VM-kVkqdyU8n3vAO8lc.ttf");
+        font-weight: 600;
+      }
+      @font-face {
+        font-family: "IBM Plex Sans";
+        src: url("assets/fonts/zYXGKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1swZSAXcomDVmadSD2FlzAA.ttf");
+        font-weight: 400;
+      }
+
+      :root {
+        --paper: #e8e2d0;
+        --paper-raised: #f4efe0;
+        --panel: #efe9d8;
+        --shadow: #ded7c2;
+        --ink: #1f1b14;
+        --muted: #6b6553;
+        --blue: #2e5a8c;
+        --red: #a8332e;
+        --amber: #b3631a;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: "IBM Plex Sans", sans-serif;
+      }
+
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background:
+          linear-gradient(rgba(31, 27, 20, 0.055) 1px, transparent 1px) 0 0 / 34px 34px,
+          linear-gradient(90deg, rgba(31, 27, 20, 0.055) 1px, transparent 1px) 0 0 / 34px 34px,
+          radial-gradient(900px 700px at 75% 18%, rgba(46, 90, 140, 0.08), transparent 65%),
+          radial-gradient(800px 620px at 14% 82%, rgba(168, 51, 46, 0.07), transparent 68%),
+          var(--paper);
+      }
+
+      .scene,
+      .wipe {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+      }
+
+      .scene-inner {
+        width: 100%;
+        height: 100%;
+        padding: 76px 92px;
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+      }
+
+      .field-sheet {
+        background:
+          linear-gradient(rgba(31, 27, 20, 0.045) 1px, transparent 1px) 0 0 / 100% 30px,
+          linear-gradient(90deg, rgba(31, 27, 20, 0.045) 1px, transparent 1px) 0 0 / 30px 100%,
+          var(--paper);
+        border: 2px solid var(--ink);
+        box-shadow: 12px 12px 0 rgba(31, 27, 20, 0.18);
+      }
+
+      .stamp {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: max-content;
+        padding: 7px 18px;
+        border: 2px solid var(--red);
+        color: var(--red);
+        font-family: "Oswald";
+        font-size: 22px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        background: rgba(244, 239, 224, 0.68);
+      }
+
+      .kicker {
+        font-family: "Oswald";
+        color: var(--red);
+        font-size: 22px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+      }
+
+      .headline {
+        font-family: "Saira Condensed";
+        font-weight: 800;
+        font-size: 118px;
+        line-height: 0.92;
+        letter-spacing: 0;
+        text-transform: uppercase;
+        max-width: 940px;
+      }
+
+      .subhead {
+        font-family: "IBM Plex Mono";
+        font-size: 29px;
+        line-height: 1.42;
+        color: var(--muted);
+        max-width: 830px;
+      }
+
+      .rule {
+        width: 100%;
+        height: 2px;
+        background: var(--ink);
+        transform-origin: left center;
+      }
+
+      .photo-shell {
+        position: relative;
+        border: 2px solid var(--ink);
+        background: var(--paper-raised);
+        box-shadow: 14px 14px 0 rgba(31, 27, 20, 0.2);
+        overflow: hidden;
+      }
+
+      .photo-shell img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .frame-label {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        z-index: 4;
+        padding: 7px 12px;
+        background: var(--ink);
+        color: var(--paper-raised);
+        font-family: "Oswald";
+        font-size: 17px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .mono {
+        font-family: "IBM Plex Mono";
+        font-variant-numeric: tabular-nums;
+      }
+
+      .node-card,
+      .stat-card,
+      .model-card,
+      .ledger,
+      .task-card,
+      .proof-card {
+        background: var(--paper-raised);
+        border: 2px solid var(--ink);
+        box-shadow: 7px 7px 0 rgba(31, 27, 20, 0.16);
+      }
+
+      .blue {
+        color: var(--blue);
+        border-color: var(--blue);
+      }
+
+      .red {
+        color: var(--red);
+        border-color: var(--red);
+      }
+
+      .blue-bg {
+        background: #eaf0f6;
+        border-color: var(--blue);
+      }
+
+      .red-bg {
+        background: #f2dfd7;
+        border-color: var(--red);
+      }
+
+      .corner {
+        position: absolute;
+        width: 30px;
+        height: 30px;
+        border: 3px solid var(--ink);
+        opacity: 0.8;
+      }
+
+      .corner.tl {
+        top: 34px;
+        left: 34px;
+        border-right: 0;
+        border-bottom: 0;
+      }
+
+      .corner.br {
+        right: 34px;
+        bottom: 34px;
+        border-left: 0;
+        border-top: 0;
+      }
+
+      .s1-grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 0.92fr 1.08fr;
+        gap: 48px;
+        align-items: center;
+      }
+
+      .s1-left {
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+      }
+
+      .s1-photo {
+        width: 100%;
+        height: 710px;
+      }
+
+      .route-map {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        pointer-events: none;
+      }
+
+      .route-map path {
+        fill: none;
+        stroke-width: 5;
+        stroke-linecap: square;
+        stroke-dasharray: 1100;
+        stroke-dashoffset: 1100;
+      }
+
+      .task-slip {
+        position: absolute;
+        z-index: 6;
+        width: 220px;
+        padding: 12px 14px;
+        background: var(--panel);
+        border: 2px solid var(--ink);
+        font-family: "IBM Plex Mono";
+        font-size: 18px;
+        box-shadow: 6px 6px 0 rgba(31, 27, 20, 0.18);
+      }
+
+      .task-slip b {
+        display: block;
+        font-family: "Oswald";
+        font-size: 18px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .s2-layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 42px;
+        min-height: 0;
+      }
+
+      .setup-shot {
+        height: 800px;
+      }
+
+      .commander-stack {
+        display: grid;
+        gap: 24px;
+        align-content: center;
+      }
+
+      .commander-card {
+        padding: 28px 30px;
+        min-height: 190px;
+        border-left-width: 12px;
+      }
+
+      .commander-card h3 {
+        font-family: "Saira Condensed";
+        font-size: 48px;
+        line-height: 1;
+        color: var(--ink);
+      }
+
+      .commander-card p {
+        margin-top: 12px;
+        font-family: "IBM Plex Mono";
+        font-size: 22px;
+        color: var(--muted);
+        line-height: 1.35;
+      }
+
+      .link-strip {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 18px 24px;
+        background: var(--panel);
+        border: 2px dashed var(--ink);
+        font-family: "IBM Plex Mono";
+        font-size: 22px;
+      }
+
+      .link-dot {
+        width: 18px;
+        height: 18px;
+        background: var(--blue);
+        border-radius: 50%;
+      }
+
+      .s3-grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 22px;
+        align-content: center;
+      }
+
+      .model-card {
+        min-height: 205px;
+        padding: 22px;
+      }
+
+      .model-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 20px;
+      }
+
+      .model-card h3 {
+        font-family: "Saira Condensed";
+        font-size: 44px;
+        line-height: 1;
+      }
+
+      .points {
+        font-family: "Oswald";
+        font-size: 38px;
+        color: var(--blue);
+      }
+
+      .model-card p {
+        margin: 12px 0 18px;
+        min-height: 52px;
+        font-family: "IBM Plex Mono";
+        font-size: 18px;
+        line-height: 1.35;
+        color: var(--muted);
+      }
+
+      .meter {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 12px;
+        align-items: center;
+        margin: 8px 0;
+        font-family: "IBM Plex Mono";
+        font-size: 16px;
+        color: var(--muted);
+      }
+
+      .meter-track {
+        height: 13px;
+        background: rgba(31, 27, 20, 0.16);
+        transform-origin: left center;
+      }
+
+      .meter-track i {
+        display: block;
+        height: 100%;
+        width: var(--w);
+        background: var(--blue);
+        transform-origin: left center;
+      }
+
+      .risk-tag {
+        display: inline-flex;
+        margin-top: 10px;
+        padding: 2px 8px;
+        border: 2px solid var(--red);
+        color: var(--red);
+        font-family: "Oswald";
+        font-size: 17px;
+        letter-spacing: 0.1em;
+      }
+
+      .cap-row {
+        display: grid;
+        grid-template-columns: 1fr 280px;
+        gap: 28px;
+        align-items: center;
+      }
+
+      .cap-counter {
+        padding: 18px 22px;
+        font-family: "IBM Plex Mono";
+        font-size: 28px;
+        border: 2px solid var(--ink);
+        background: var(--panel);
+      }
+
+      .s4-layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 360px 1fr 420px;
+        gap: 32px;
+        align-items: center;
+      }
+
+      .client-stack,
+      .agent-stack,
+      .table-row {
+        display: grid;
+        gap: 18px;
+      }
+
+      .client,
+      .agent {
+        padding: 22px;
+        font-family: "Oswald";
+        font-size: 28px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .db-core {
+        position: relative;
+        min-height: 680px;
+        padding: 38px;
+      }
+
+      .db-title {
+        font-family: "Saira Condensed";
+        font-size: 80px;
+        line-height: 0.9;
+        text-align: center;
+      }
+
+      .reducers {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 18px;
+        margin: 40px 0 28px;
+      }
+
+      .reducer {
+        padding: 18px 14px;
+        text-align: center;
+        border: 2px solid var(--red);
+        color: var(--red);
+        font-family: "IBM Plex Mono";
+        font-size: 24px;
+        font-weight: 600;
+        background: rgba(244, 239, 224, 0.78);
+      }
+
+      .tables {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 14px;
+      }
+
+      .table-chip {
+        padding: 14px 16px;
+        border: 2px solid rgba(31, 27, 20, 0.44);
+        background: var(--panel);
+        font-family: "IBM Plex Mono";
+        font-size: 23px;
+      }
+
+      .wire {
+        height: 2px;
+        background: var(--ink);
+        transform-origin: left center;
+      }
+
+      .no-double {
+        position: absolute;
+        right: 42px;
+        bottom: 46px;
+        padding: 12px 18px;
+        background: var(--red);
+        color: var(--paper-raised);
+        font-family: "Oswald";
+        font-size: 28px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .s5-layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1.08fr 0.92fr;
+        gap: 40px;
+        align-items: stretch;
+        min-height: 0;
+      }
+
+      .battle-shot {
+        height: 760px;
+      }
+
+      .claim-board {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 24px;
+      }
+
+      .claim-title {
+        font-family: "Saira Condensed";
+        font-size: 72px;
+        line-height: 0.96;
+      }
+
+      .race-lane {
+        position: relative;
+        min-height: 360px;
+        border: 2px dashed rgba(31, 27, 20, 0.42);
+        background: rgba(244, 239, 224, 0.48);
+        overflow: hidden;
+      }
+
+      .agent-token,
+      .target-task {
+        position: absolute;
+        width: 210px;
+        padding: 18px;
+        font-family: "IBM Plex Mono";
+        font-size: 20px;
+        border: 2px solid var(--ink);
+        background: var(--paper-raised);
+        box-shadow: 6px 6px 0 rgba(31, 27, 20, 0.16);
+      }
+
+      .agent-token b,
+      .target-task b {
+        display: block;
+        font-family: "Oswald";
+        font-size: 24px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .target-task {
+        right: 32px;
+        top: 128px;
+        width: 250px;
+        border-color: var(--amber);
+      }
+
+      .json-card {
+        padding: 22px;
+        background: #1f1b14;
+        color: var(--paper-raised);
+        border: 2px solid var(--ink);
+        font-family: "IBM Plex Mono";
+        font-size: 22px;
+        line-height: 1.48;
+      }
+
+      .json-card b {
+        color: #7fb0e0;
+      }
+
+      .json-card span {
+        display: block;
+      }
+
+      .s6-layout {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 0.92fr 1.08fr;
+        gap: 46px;
+        align-items: center;
+      }
+
+      .order-panel {
+        padding: 32px;
+        min-height: 660px;
+      }
+
+      .order-panel h2 {
+        font-family: "Saira Condensed";
+        font-size: 78px;
+        line-height: 0.95;
+      }
+
+      .intent-row {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 18px;
+        margin: 22px 0;
+        padding: 18px;
+        border: 2px solid rgba(31, 27, 20, 0.28);
+        background: var(--panel);
+        font-family: "IBM Plex Mono";
+        font-size: 22px;
+      }
+
+      .order-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 28px;
+      }
+
+      .order-btn {
+        height: 82px;
+        border: 3px solid var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: "Oswald";
+        font-size: 30px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        background: var(--paper-raised);
+      }
+
+      .order-btn.primary {
+        border-color: var(--blue);
+        color: var(--blue);
+      }
+
+      .token {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--blue);
+        color: var(--paper-raised);
+        font-family: "Oswald";
+        font-size: 34px;
+      }
+
+      .pressure-demo {
+        display: grid;
+        gap: 24px;
+      }
+
+      .pressure-title {
+        font-family: "Saira Condensed";
+        font-size: 76px;
+        line-height: 0.95;
+      }
+
+      .pressure-track {
+        height: 46px;
+        border: 2px solid var(--ink);
+        background: var(--shadow);
+        display: flex;
+      }
+
+      .pressure-track i {
+        display: block;
+        width: 72%;
+        height: 100%;
+        background: var(--blue);
+        transform-origin: left center;
+      }
+
+      .dispatch {
+        min-height: 230px;
+        border: 2px solid var(--ink);
+        background: var(--panel);
+        font-family: "IBM Plex Mono";
+        font-size: 21px;
+        line-height: 1.55;
+        overflow: hidden;
+      }
+
+      .dispatch h4 {
+        padding: 10px 16px;
+        background: var(--ink);
+        color: var(--paper-raised);
+        font-family: "Oswald";
+        font-size: 22px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .dispatch-line {
+        display: grid;
+        grid-template-columns: 92px 180px 1fr;
+        gap: 18px;
+        padding: 5px 16px;
+      }
+
+      .dispatch-line b {
+        color: var(--amber);
+        font-family: "Oswald";
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .s7-grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 28px;
+        align-items: stretch;
+      }
+
+      .proof-card {
+        padding: 34px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 470px;
+      }
+
+      .proof-card h3 {
+        font-family: "Saira Condensed";
+        font-size: 66px;
+        line-height: 0.94;
+      }
+
+      .proof-card p {
+        font-family: "IBM Plex Mono";
+        font-size: 25px;
+        line-height: 1.38;
+        color: var(--muted);
+      }
+
+      .final-url {
+        margin-top: 22px;
+        padding: 26px 34px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--ink);
+        color: var(--paper-raised);
+        font-family: "IBM Plex Mono";
+        font-size: 34px;
+      }
+
+      .url-rule {
+        height: 4px;
+        background: var(--blue);
+        transform-origin: left center;
+      }
+
+      .wipe-sheet {
+        position: absolute;
+        inset: 0;
+        background: var(--ink);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .wipe-sheet span {
+        color: var(--paper-raised);
+        font-family: "Oswald";
+        font-size: 32px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="132"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div class="corner tl"></div>
+      <div class="corner br"></div>
+
+      <section id="scene-1" class="clip scene" data-start="0" data-duration="14" data-track-index="1">
+        <div class="scene-inner">
+          <div class="s1-grid">
+            <div class="s1-left">
+              <div class="stamp s1-stamp">Multiplayer AI war</div>
+              <h1 class="headline s1-title">Agents need a battlefield.</h1>
+              <div class="rule s1-rule"></div>
+              <p class="subhead s1-copy">
+                Swarm Arena turns multi-agent coordination into live combat over shared SpacetimeDB state.
+              </p>
+            </div>
+            <div class="photo-shell s1-photo" data-layout-allow-overflow>
+              <span class="frame-label">Live battle board</span>
+              <img class="battle-img" src="assets/battle-board.png" alt="Swarm Arena battle board" />
+              <svg class="route-map" viewBox="0 0 900 710" preserveAspectRatio="none">
+                <path class="route-blue" d="M120 450 C260 340 365 330 480 360 C615 398 690 350 812 285" stroke="#2E5A8C" />
+                <path class="route-red" d="M805 455 C690 390 602 390 505 405 C395 422 302 380 185 320" stroke="#A8332E" />
+              </svg>
+              <div class="task-slip slip-a"><b>pending</b>Blue assault: North Ridge</div>
+              <div class="task-slip slip-b"><b>claimed</b>red-worker-2</div>
+              <div class="task-slip slip-c"><b>posted</b>+37 pressure</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-2" class="clip scene" data-start="14" data-duration="19" data-track-index="1">
+        <div class="scene-inner">
+          <div>
+            <div class="kicker s2-kicker">Multiplayer lobby</div>
+            <h2 class="headline s2-title">Two humans. One live room.</h2>
+          </div>
+          <div class="s2-layout">
+            <div class="photo-shell setup-shot s2-shot" data-layout-allow-overflow>
+              <span class="frame-label">Shared setup state</span>
+              <img class="setup-img" src="assets/setup-room.png" alt="Swarm Arena setup room" />
+            </div>
+            <div class="commander-stack">
+              <div class="commander-card node-card blue blue-bg commander-blue">
+                <div class="kicker blue">Blue</div>
+                <h3>Hosts the lobby</h3>
+                <p>Creates a room and drafts a fleet first.</p>
+              </div>
+              <div class="link-strip room-link">
+                <span class="link-dot"></span>
+                <span>https://swarm.benautomates.com/?room=3</span>
+              </div>
+              <div class="commander-card node-card red red-bg commander-red">
+                <div class="kicker red">Red</div>
+                <h3>Joins the same room</h3>
+                <p>Drafts independently against the Blue commander.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-3" class="clip scene" data-start="33" data-duration="19" data-track-index="1">
+        <div class="scene-inner">
+          <div class="cap-row">
+            <div>
+              <div class="kicker s3-kicker">Model draft</div>
+              <h2 class="headline s3-title">Speed is not the whole game.</h2>
+            </div>
+            <div class="cap-counter mono s3-cap">CREW <b>11</b>/14</div>
+          </div>
+          <div class="s3-grid">
+            <div class="model-card model-1">
+              <div class="model-top"><h3>Scout</h3><span class="points">3pt</span></div>
+              <p>Fast recon and cheap lane pressure.</p>
+              <div class="meter"><span>SPD</span><span class="meter-track"><i style="--w: 96%"></i></span></div>
+              <div class="meter"><span>FIT</span><span class="meter-track"><i style="--w: 56%"></i></span></div>
+            </div>
+            <div class="model-card model-2">
+              <div class="model-top"><h3>Engineer</h3><span class="points">5pt</span></div>
+              <p>Premium fortify, sabotage, and HQ push.</p>
+              <div class="meter"><span>SPD</span><span class="meter-track"><i style="--w: 92%"></i></span></div>
+              <div class="meter"><span>FIT</span><span class="meter-track"><i style="--w: 98%"></i></span></div>
+            </div>
+            <div class="model-card model-3">
+              <div class="model-top"><h3>Runner</h3><span class="points">3pt</span></div>
+              <p>Balanced assault through open lanes.</p>
+              <div class="meter"><span>SPD</span><span class="meter-track"><i style="--w: 78%"></i></span></div>
+              <div class="meter"><span>FIT</span><span class="meter-track"><i style="--w: 78%"></i></span></div>
+            </div>
+            <div class="model-card model-4">
+              <div class="model-top"><h3>Surveyor</h3><span class="points">3pt</span></div>
+              <p>Command recon with light combat punch.</p>
+              <div class="meter"><span>SPD</span><span class="meter-track"><i style="--w: 76%"></i></span></div>
+              <div class="meter"><span>FIT</span><span class="meter-track"><i style="--w: 66%"></i></span></div>
+            </div>
+            <div class="model-card model-5">
+              <div class="model-top"><h3>Skirmisher</h3><span class="points">1pt</span></div>
+              <p>Cheap body for assault and sabotage.</p>
+              <div class="meter"><span>SPD</span><span class="meter-track"><i style="--w: 58%"></i></span></div>
+              <span class="risk-tag">RISK</span>
+            </div>
+            <div class="model-card model-6">
+              <div class="model-top"><h3>Analyst</h3><span class="points">2pt</span></div>
+              <p>Budget command and disruption.</p>
+              <div class="meter"><span>SPD</span><span class="meter-track"><i style="--w: 46%"></i></span></div>
+              <span class="risk-tag">RISK</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-4" class="clip scene" data-start="52" data-duration="23" data-track-index="1">
+        <div class="scene-inner">
+          <div>
+            <div class="kicker s4-kicker">Why SpacetimeDB</div>
+            <h2 class="headline s4-title">The database is the war server.</h2>
+          </div>
+          <div class="s4-layout">
+            <div class="client-stack">
+              <div class="client node-card blue-bg client-1">Blue Commander</div>
+              <div class="wire wire-l1"></div>
+              <div class="client node-card red-bg client-2">Red Commander</div>
+            </div>
+            <div class="db-core ledger">
+              <div class="db-title">SPACETIMEDB</div>
+              <div class="reducers">
+                <div class="reducer red-stamp-1">issue_order</div>
+                <div class="reducer red-stamp-2">claim_task</div>
+                <div class="reducer red-stamp-3">post_result</div>
+                <div class="reducer red-stamp-4">battle_tick</div>
+              </div>
+              <div class="tables">
+                <div class="table-chip table-1">task</div>
+                <div class="table-chip table-2">battle_node</div>
+                <div class="table-chip table-3">team_state</div>
+                <div class="table-chip table-4">event</div>
+              </div>
+              <div class="no-double no-double-claim">No double claim</div>
+            </div>
+            <div class="agent-stack">
+              <div class="agent node-card agent-1">Agent client 01</div>
+              <div class="wire wire-r1"></div>
+              <div class="agent node-card agent-2">Agent client 02</div>
+              <div class="wire wire-r2"></div>
+              <div class="agent node-card agent-3">Agent client 03</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-5" class="clip scene" data-start="75" data-duration="24" data-track-index="1">
+        <div class="scene-inner">
+          <div class="s5-layout">
+            <div class="photo-shell battle-shot s5-shot" data-layout-allow-overflow>
+              <span class="frame-label">Atomic claim on the map</span>
+              <img class="battle-img-2" src="assets/battle-board-detail.png" alt="Swarm Arena combat board" />
+            </div>
+            <div class="claim-board">
+              <div>
+                <div class="kicker s5-kicker">Atomic claim = combat</div>
+                <h2 class="claim-title s5-title">Many agents see work. One agent gets it.</h2>
+              </div>
+              <div class="race-lane">
+                <div class="agent-token racer racer-a blue-bg"><b>Scout</b>blue-worker-2</div>
+                <div class="agent-token racer racer-b red-bg"><b>Scout</b>red-worker-1</div>
+                <div class="agent-token racer racer-c"><b>Engineer</b>blue-lead-1</div>
+                <div class="target-task task-target"><b>task</b>Blue assault: North Ridge</div>
+              </div>
+              <div class="json-card json-result">
+                <span>{</span>
+                <span>&nbsp;&nbsp;<b>"outcome"</b>: "done",</span>
+                <span>&nbsp;&nbsp;<b>"confidence"</b>: "high",</span>
+                <span>&nbsp;&nbsp;<b>"result"</b>: "+37 pressure"</span>
+                <span>}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-6" class="clip scene" data-start="99" data-duration="17" data-track-index="1">
+        <div class="scene-inner">
+          <div class="s6-layout">
+            <div class="order-panel ledger">
+              <div class="kicker s6-kicker">Human command</div>
+              <h2 class="s6-title">Humans steer. Agents execute.</h2>
+              <div class="intent-row row-1"><b>Intent</b><span>Stop RED at North Ridge</span></div>
+              <div class="intent-row row-2"><b>Fight</b><span>BLUE needs 74 more pressure. RED pressure slows the lane.</span></div>
+              <div class="intent-row row-3"><b>Agents</b><span>Orders create priority tasks that agents claim atomically.</span></div>
+              <div class="order-buttons">
+                <div class="order-btn primary assault-btn">Assault</div>
+                <div class="order-btn">Hold</div>
+                <div class="order-btn">Sabotage</div>
+                <div class="order-btn">Scout</div>
+              </div>
+            </div>
+            <div class="pressure-demo">
+              <div class="token command-token">1</div>
+              <h2 class="pressure-title">A command token becomes priority work.</h2>
+              <div class="pressure-track"><i class="pressure-fill"></i></div>
+              <div class="dispatch">
+                <h4>Field dispatches · SpacetimeDB</h4>
+                <div class="dispatch-line log-1"><span>04:11:02</span><b>human_order</b><span>BLUE order: assault North Ridge</span></div>
+                <div class="dispatch-line log-2"><span>04:11:03</span><b>task_claimed</b><span>blue-worker-2 claimed assault</span></div>
+                <div class="dispatch-line log-3"><span>04:11:05</span><b>combat_result</b><span>BLUE pressure resolved (+37)</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-7" class="clip scene" data-start="116" data-duration="16" data-track-index="1">
+        <div class="scene-inner">
+          <div>
+            <div class="stamp s7-stamp">Launchpad hackathon</div>
+            <h2 class="headline s7-title">Built for live shared state.</h2>
+          </div>
+          <div class="s7-grid">
+            <div class="proof-card proof-1 blue-bg">
+              <h3>Multiplayer state</h3>
+              <p>Two commanders draft and command the same room live.</p>
+            </div>
+            <div class="proof-card proof-2">
+              <h3>Atomic reducers</h3>
+              <p>`claim_task` prevents double-work without an external queue.</p>
+            </div>
+            <div class="proof-card proof-3 red-bg">
+              <h3>Real LLM agents</h3>
+              <p>OpenRouter models return strict JSON that mutates the map.</p>
+            </div>
+          </div>
+          <div class="final-url">
+            <span>swarm.benautomates.com</span>
+            <span>SWARM ARENA</span>
+          </div>
+          <div class="url-rule"></div>
+        </div>
+      </section>
+
+      <div id="wipe-1" class="clip wipe" data-start="13.35" data-duration="0.9" data-track-index="8" data-layout-allow-overflow>
+        <div class="wipe-sheet" data-layout-allow-overflow><span>Room sync</span></div>
+      </div>
+      <div id="wipe-2" class="clip wipe" data-start="32.35" data-duration="0.9" data-track-index="8" data-layout-allow-overflow>
+        <div class="wipe-sheet" data-layout-allow-overflow><span>Draft phase</span></div>
+      </div>
+      <div id="wipe-3" class="clip wipe" data-start="51.35" data-duration="0.9" data-track-index="8" data-layout-allow-overflow>
+        <div class="wipe-sheet" data-layout-allow-overflow><span>Reducer layer</span></div>
+      </div>
+      <div id="wipe-4" class="clip wipe" data-start="74.35" data-duration="0.9" data-track-index="8" data-layout-allow-overflow>
+        <div class="wipe-sheet" data-layout-allow-overflow><span>Atomic claim</span></div>
+      </div>
+      <div id="wipe-5" class="clip wipe" data-start="98.35" data-duration="0.9" data-track-index="8" data-layout-allow-overflow>
+        <div class="wipe-sheet" data-layout-allow-overflow><span>Command</span></div>
+      </div>
+      <div id="wipe-6" class="clip wipe" data-start="115.35" data-duration="0.9" data-track-index="8" data-layout-allow-overflow>
+        <div class="wipe-sheet" data-layout-allow-overflow><span>After action</span></div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      function enter(selector, time, vars) {
+        tl.fromTo(selector, { opacity: 0, y: vars.y || 38, x: vars.x || 0, scale: vars.scale || 1 }, {
+          opacity: 1,
+          y: 0,
+          x: 0,
+          scale: 1,
+          duration: vars.duration || 0.65,
+          ease: vars.ease || "power3.out",
+        }, time);
+      }
+
+      function draw(selector, time, duration) {
+        tl.fromTo(selector, { scaleX: 0 }, { scaleX: 1, duration, ease: "power2.out" }, time);
+      }
+
+      function wipe(id, time) {
+        tl.fromTo(id + " .wipe-sheet", { xPercent: -100 }, { xPercent: 0, duration: 0.42, ease: "power3.in", overwrite: "auto" }, time);
+        tl.to(id + " .wipe-sheet", { xPercent: 100, duration: 0.42, ease: "power3.out", overwrite: "auto" }, time + 0.44);
+        enter(id + " span", time + 0.18, { y: 18, duration: 0.26, ease: "power2.out" });
+      }
+
+      enter(".s1-stamp", 0.25, { y: 26, ease: "back.out(1.5)" });
+      enter(".s1-title", 0.55, { y: 54, duration: 0.8, ease: "expo.out" });
+      draw(".s1-rule", 1.05, 0.7);
+      enter(".s1-copy", 1.35, { y: 34, duration: 0.7 });
+      enter(".s1-photo", 0.8, { x: 80, y: 26, scale: 0.94, duration: 0.9, ease: "power4.out" });
+      tl.fromTo(".battle-img", { scale: 1.02 }, { scale: 1.07, duration: 12.6, ease: "none" }, 0.9);
+      tl.to(".route-map path", { strokeDashoffset: 0, duration: 2.2, ease: "power2.out", stagger: 0.35 }, 2.1);
+      enter(".slip-a", 3.4, { x: -34, y: 30, duration: 0.5 });
+      enter(".slip-b", 4.0, { x: 42, y: 30, duration: 0.5 });
+      enter(".slip-c", 4.6, { x: -20, y: 30, duration: 0.5 });
+      tl.set(".slip-a", { left: 28, top: 580 }, 0);
+      tl.set(".slip-b", { right: 32, top: 105 }, 0);
+      tl.set(".slip-c", { right: 72, bottom: 48 }, 0);
+
+      enter(".s2-kicker", 14.25, { y: 28 });
+      enter(".s2-title", 14.55, { y: 48, duration: 0.75, ease: "expo.out" });
+      enter(".s2-shot", 15.1, { x: -58, y: 22, duration: 0.85, ease: "power4.out" });
+      tl.fromTo(".setup-img", { scale: 1.02 }, { scale: 1.065, duration: 17, ease: "none" }, 15.1);
+      enter(".commander-blue", 16.0, { x: 60, y: 0, duration: 0.65 });
+      enter(".room-link", 16.7, { x: 40, y: 0, duration: 0.55, ease: "power2.out" });
+      enter(".commander-red", 17.25, { x: 60, y: 0, duration: 0.65 });
+      tl.fromTo(".link-dot", { scale: 0.5, opacity: 0.5 }, { scale: 1.15, opacity: 1, duration: 0.8, yoyo: true, repeat: 15, ease: "sine.inOut" }, 17.0);
+
+      enter(".s3-kicker", 33.2, { y: 28 });
+      enter(".s3-title", 33.55, { y: 48, duration: 0.75, ease: "expo.out" });
+      enter(".s3-cap", 34.0, { x: 46, y: 0, duration: 0.55, ease: "power2.out" });
+      for (let i = 1; i <= 6; i += 1) {
+        enter(".model-" + i, 34.2 + i * 0.18, { y: 46, duration: 0.55, ease: i % 2 ? "back.out(1.3)" : "power3.out" });
+      }
+      tl.fromTo(".meter-track i", { scaleX: 0 }, { scaleX: 1, duration: 0.9, ease: "power2.out", stagger: 0.08 }, 36.0);
+      enter(".risk-tag", 37.7, { y: 12, duration: 0.32, ease: "back.out(2)" });
+
+      enter(".s4-kicker", 52.25, { y: 28 });
+      enter(".s4-title", 52.55, { y: 48, duration: 0.75, ease: "expo.out" });
+      enter(".client-1", 53.3, { x: -54, y: 0, duration: 0.55 });
+      draw(".wire-l1", 53.75, 0.45);
+      enter(".client-2", 54.0, { x: -54, y: 0, duration: 0.55 });
+      enter(".db-core", 54.2, { y: 38, scale: 0.96, duration: 0.72, ease: "power4.out" });
+      enter(".agent-1", 55.0, { x: 54, y: 0, duration: 0.5 });
+      draw(".wire-r1", 55.35, 0.45);
+      enter(".agent-2", 55.55, { x: 54, y: 0, duration: 0.5 });
+      draw(".wire-r2", 55.9, 0.45);
+      enter(".agent-3", 56.1, { x: 54, y: 0, duration: 0.5 });
+      for (let i = 1; i <= 4; i += 1) enter(".red-stamp-" + i, 56.5 + i * 0.24, { y: 26, duration: 0.36, ease: "back.out(2)" });
+      for (let i = 1; i <= 4; i += 1) enter(".table-" + i, 58.4 + i * 0.17, { y: 22, duration: 0.36 });
+      enter(".no-double-claim", 60.2, { y: 30, scale: 0.88, duration: 0.45, ease: "back.out(2)" });
+      tl.fromTo(".db-core", { boxShadow: "7px 7px 0 rgba(31,27,20,0.14)" }, { boxShadow: "16px 16px 0 rgba(46,90,140,0.2)", duration: 2.4, yoyo: true, repeat: 4, ease: "sine.inOut" }, 61.0);
+
+      enter(".s5-shot", 75.25, { x: -52, y: 20, duration: 0.75, ease: "power4.out" });
+      tl.fromTo(".battle-img-2", { scale: 1.02 }, { scale: 1.06, duration: 22, ease: "none" }, 75.25);
+      enter(".s5-kicker", 75.55, { y: 26 });
+      enter(".s5-title", 75.9, { y: 42, duration: 0.72, ease: "expo.out" });
+      enter(".race-lane", 77.0, { y: 30, duration: 0.55 });
+      tl.set(".racer-a", { left: 24, top: 40 }, 75);
+      tl.set(".racer-b", { left: 24, top: 152 }, 75);
+      tl.set(".racer-c", { left: 24, top: 264 }, 75);
+      enter(".task-target", 77.7, { x: 40, y: 0, duration: 0.45 });
+      tl.to(".racer-a", { x: 398, y: 88, duration: 1.0, ease: "power2.inOut" }, 79.0);
+      tl.to(".racer-b", { x: 250, y: -10, duration: 0.9, ease: "power2.inOut" }, 79.0);
+      tl.to(".racer-c", { x: 300, y: -82, duration: 0.9, ease: "power2.inOut" }, 79.0);
+      tl.to(".racer-a", { borderColor: "#2E5A8C", backgroundColor: "#EAF0F6", duration: 0.25 }, 80.1);
+      tl.to(".racer-b, .racer-c", { opacity: 0.45, duration: 0.3 }, 80.15);
+      enter(".json-result", 81.2, { y: 32, duration: 0.55 });
+
+      enter(".s6-kicker", 99.25, { y: 26 });
+      enter(".s6-title", 99.55, { y: 46, duration: 0.7, ease: "expo.out" });
+      enter(".order-panel", 99.2, { x: -50, y: 18, duration: 0.75 });
+      enter(".row-1", 100.4, { y: 22, duration: 0.35 });
+      enter(".row-2", 100.72, { y: 22, duration: 0.35 });
+      enter(".row-3", 101.04, { y: 22, duration: 0.35 });
+      enter(".command-token", 101.4, { x: 80, y: -30, scale: 0.8, duration: 0.45, ease: "back.out(2)" });
+      enter(".pressure-title", 101.8, { y: 40, duration: 0.65, ease: "expo.out" });
+      tl.fromTo(".assault-btn", { backgroundColor: "#F4EFE0" }, { backgroundColor: "#EAF0F6", duration: 0.35, yoyo: true, repeat: 1 }, 103.0);
+      tl.fromTo(".pressure-fill", { scaleX: 0.18 }, { scaleX: 1, duration: 1.2, ease: "power2.out" }, 103.4);
+      enter(".dispatch", 104.1, { y: 30, duration: 0.55 });
+      enter(".log-1", 104.6, { y: 18, duration: 0.3 });
+      enter(".log-2", 105.1, { y: 18, duration: 0.3 });
+      enter(".log-3", 105.6, { y: 18, duration: 0.3 });
+
+      enter(".s7-stamp", 116.25, { y: 26, ease: "back.out(1.5)" });
+      enter(".s7-title", 116.6, { y: 48, duration: 0.75, ease: "expo.out" });
+      enter(".proof-1", 117.55, { y: 42, duration: 0.55, ease: "back.out(1.25)" });
+      enter(".proof-2", 117.85, { y: 42, duration: 0.55, ease: "back.out(1.25)" });
+      enter(".proof-3", 118.15, { y: 42, duration: 0.55, ease: "back.out(1.25)" });
+      enter(".final-url", 120.0, { y: 30, duration: 0.55 });
+      draw(".url-rule", 120.7, 0.8);
+      tl.to("#scene-7 .scene-inner", { opacity: 0, y: -30, duration: 0.8, ease: "power2.in" }, 130.8);
+
+      wipe("#wipe-1", 13.35);
+      wipe("#wipe-2", 32.35);
+      wipe("#wipe-3", 51.35);
+      wipe("#wipe-4", 74.35);
+      wipe("#wipe-5", 98.35);
+      wipe("#wipe-6", 115.35);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
